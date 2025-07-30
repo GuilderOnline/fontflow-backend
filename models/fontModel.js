@@ -28,4 +28,4 @@ const fontSchema = new mongoose.Schema({
 });
 
 const Font = mongoose.model('Font', fontSchema);
-export default Font;
+export default mongoose.models.Font || mongoose.model('Font', fontSchema);

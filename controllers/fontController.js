@@ -14,7 +14,35 @@ const s3 = new AWS.S3({
   secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
   region: process.env.AWS_REGION,
 });
+// Get all fonts
+export const getAllFonts = async (req, res) => {
+  try {
+    // If admin, get all fonts; otherwise, just the user's
+    const query = req.user?.role === 'admin' ? {} : { user: req.user.id };
 
+    const fonts = await Font.find(query).sort({ createdAt: -1 });
+
+    // Attach signed S3 preview URLs
+    const fontsWithUrls = await Promise.all(
+      fonts.map(async (font) => {
+        let previewUrl = null;
+        if (font.originalFile) {
+          previewUrl = s3.getSignedUrl('getObject', {
+            Bucket: process.env.S3_BUCKET_NAME,
+            Key: font.originalFile,
+            Expires: 3600 // 1 hour
+          });
+        }
+        return { ...font.toObject(), previewUrl };
+      })
+    );
+
+    res.json(fontsWithUrls);
+  } catch (error) {
+    console.error('Error getting fonts:', error);
+    res.status(500).json({ message: 'Error retrieving fonts' });
+  }
+};
 
 // Upload font file to S3
 export const uploadFont = async (req, res) => {

@@ -4,7 +4,7 @@ import fileType from 'file-type';
 const { fileTypeFromBuffer } = fileType; // ✅ works for CommonJS default export
 import fs from 'fs';
 import AWS from 'aws-sdk';
-import Fontkit from 'fontkit';
+import * as Fontkit from 'fontkit';
 import path from 'path';
 import Font from '../models/font.js';
 

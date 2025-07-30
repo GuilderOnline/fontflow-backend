@@ -8,7 +8,6 @@ const fontSchema = new mongoose.Schema({
     ref: 'User',
     required: true,
   },
-  // ⬇️ Metadata fields
   family: String,
   fullName: String,
   postscriptName: String,
@@ -20,12 +19,11 @@ const fontSchema = new mongoose.Schema({
   designer: String,
   description: String,
   license: String,
-
   createdAt: {
     type: Date,
     default: Date.now,
   },
 });
 
-const Font = mongoose.model('Font', fontSchema);
+// ✅ Only compile once
 export default mongoose.models.Font || mongoose.model('Font', fontSchema);

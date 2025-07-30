@@ -23,7 +23,7 @@ connectDB();
 // Routes
 import authRoutes from "./routes/authRoutes.js";
 import fontRoutes from "./routes/fontRoutes.js";
-import projectRoutes from "./routes/projectRoutes.js";
+import projectRoutes from "./routes/projectsRoutes.js";
 
 app.use("/api/auth", authRoutes);
 app.use("/api/fonts", fontRoutes);

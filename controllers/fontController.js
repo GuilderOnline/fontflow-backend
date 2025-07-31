@@ -47,11 +47,17 @@ export const getAllFonts = async (req, res) => {
 // Upload font file to S3
 export const uploadFont = async (req, res) => {
   try {
+    console.log('📂 Incoming file object:', req.file); // <--- ADD HERE
+
     if (!req.file) {
+      console.error('❌ No file uploaded in request');
       return res.status(400).json({ error: 'No file uploaded' });
     }
 
+    console.log('📂 req.file.path:', req.file.path); // <--- ADD HERE
+
     const buffer = fs.readFileSync(req.file.path);
+
 
     // Detect file type
     const type = await fileTypeFromBuffer(buffer);

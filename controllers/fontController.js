@@ -1,14 +1,9 @@
 // controllers/fontController.js
-import AWS from "aws-sdk";
-import * as fontkit from "fontkit";
-
-// ⬅️ FIX — import whole package and destructure fromBuffer function
-import fileType from "file-type"; // CommonJS compat
-const { fromBuffer } = fileType; // ⬅️ FIX
-
-import ttf2woff2 from "ttf2woff2";
-import otf2ttf from "otf2ttf";
-import Font from "../models/fontModel.js";
+import AWS from 'aws-sdk';
+import fontkit from 'fontkit';
+import fileType from 'file-type';
+import Font from '../models/fontModel.js';
+import path from 'path';
 
 // Configure AWS S3
 const s3 = new AWS.S3({
@@ -18,145 +13,93 @@ const s3 = new AWS.S3({
 });
 
 /**
- * 📤 Upload and process font
+ * 📤 Upload a font
  */
 export const uploadFont = async (req, res) => {
   try {
     if (!req.file || !req.file.buffer) {
-      return res.status(400).json({ message: "No font file uploaded" });
+      return res.status(400).json({ message: 'No font file uploaded' });
     }
 
-    // ⬅️ FIX — use fromBuffer instead of fileTypeFromBuffer
-    const type = await fromBuffer(req.file.buffer); // ⬅️ FIX
-    let originalBuffer = req.file.buffer;
-    let woff2Buffer = null;
+    // ✅ Detect file type from buffer
+    const type = await fileType.fromBuffer(req.file.buffer);
+    if (!type || !['ttf', 'otf', 'woff', 'woff2', 'eot'].includes(type.ext)) {
+      return res.status(400).json({ message: 'Invalid font file type' });
+    }
 
-    // Generate unique names
-    const baseName = req.file.originalname.replace(/\.[^/.]+$/, "");
-    const timestamp = Date.now();
+    // ✅ Load font metadata
+    const font = fontkit.create(req.file.buffer);
+    const fontMetadata = {
+      family: font.familyName || '',
+      fullName: font.fullName || '',
+      postscriptName: font.postscriptName || '',
+      style: font.subfamilyName || '',
+      weight: font['OS/2']?.usWeightClass || '',
+      manufacturer: font.manufacturer || '',
+    };
 
-    // Upload original file
-    const originalExt = type?.ext || "ttf";
-    const originalKey = `${timestamp}-${baseName}.${originalExt}`;
+    // ✅ Generate unique S3 key
+    const originalFileName = `${Date.now()}-${req.file.originalname}`;
+
+    // ✅ Upload to S3
     await s3
-      .putObject({
+      .upload({
         Bucket: process.env.S3_BUCKET_NAME,
-        Key: originalKey,
-        Body: originalBuffer,
-        ContentType: type?.mime || "application/octet-stream",
+        Key: originalFileName,
+        Body: req.file.buffer,
+        ContentType: type.mime,
       })
       .promise();
 
-    // Convert to WOFF2 if needed
-    if (["ttf", "otf"].includes(originalExt)) {
-      let ttfBuffer = originalBuffer;
-      if (originalExt === "otf") {
-        ttfBuffer = Buffer.from(otf2ttf(originalBuffer));
-      }
-      woff2Buffer = Buffer.from(ttf2woff2(ttfBuffer));
-    } else if (["woff", "woff2"].includes(originalExt)) {
-      woff2Buffer = originalBuffer; // No conversion needed
-    }
-
-    // Upload WOFF2 version
-    const woff2Key = `${timestamp}-${baseName}.woff2`;
-    await s3
-      .putObject({
-        Bucket: process.env.S3_BUCKET_NAME,
-        Key: woff2Key,
-        Body: woff2Buffer,
-        ContentType: "font/woff2",
-      })
-      .promise();
-
-    // Create signed download URLs (valid for 7 days)
-    const originalUrl = s3.getSignedUrl("getObject", {
-      Bucket: process.env.S3_BUCKET_NAME,
-      Key: originalKey,
-      Expires: 7 * 24 * 60 * 60,
-    });
-
-    const woff2Url = s3.getSignedUrl("getObject", {
-      Bucket: process.env.S3_BUCKET_NAME,
-      Key: woff2Key,
-      Expires: 7 * 24 * 60 * 60,
-    });
-
-    // Extract metadata
-    const font = fontkit.create(woff2Buffer);
-
-    // Save in MongoDB
+    // ✅ Save to MongoDB
     const newFont = await Font.create({
-      name: req.file.originalname,
-      originalFile: originalKey,
-      woff2File: woff2Key,
+      name: fontMetadata.family,
+      originalFile: originalFileName,
       user: req.user.id,
-      family: font.familyName || "",
-      fullName: font.fullName || "",
-      style: font.subfamilyName || "",
-      originalDownloadUrl: originalUrl,
-      woff2DownloadUrl: woff2Url,
+      ...fontMetadata,
     });
 
-    res.json(newFont);
+    res.status(201).json(newFont);
   } catch (error) {
-    console.error("❌ Font upload failed:", error);
-    res.status(500).json({ message: "Font upload failed" });
+    console.error('❌ Error uploading font:', error);
+    res.status(500).json({ message: 'Server error while uploading font' });
   }
 };
 
 /**
- * 📄 Get all fonts for logged-in user
+ * 📄 Get all fonts (admin gets all, users get only their own)
  */
 export const getAllFonts = async (req, res) => {
   try {
-    // Admins see all fonts, normal users only their own
-    const query = req.user.role === "admin" ? {} : { user: req.user.id };
-    const fonts = await Font.find(query).sort({ createdAt: -1 });
-
-    // Attach fresh signed URLs
-    const fontsWithUrls = fonts.map((font) => {
-      const originalUrl = font.originalFile
-        ? s3.getSignedUrl("getObject", {
-            Bucket: process.env.S3_BUCKET_NAME,
-            Key: font.originalFile,
-            Expires: 60 * 5, // 5 min expiry
-          })
-        : null;
-
-      const woff2Url = font.woff2File
-        ? s3.getSignedUrl("getObject", {
-            Bucket: process.env.S3_BUCKET_NAME,
-            Key: font.woff2File,
-            Expires: 60 * 5,
-          })
-        : null;
-
-      return {
-        ...font.toObject(),
-        originalDownloadUrl: originalUrl,
-        woff2DownloadUrl: woff2Url,
-      };
-    });
-
-    res.status(200).json(fontsWithUrls);
-  } catch (err) {
-    console.error("❌ Error fetching fonts:", err);
-    res.status(500).json({ message: "Error fetching fonts" });
+    let fonts;
+    if (req.user.role === 'admin') {
+      fonts = await Font.find().sort({ createdAt: -1 });
+    } else {
+      fonts = await Font.find({ user: req.user.id }).sort({ createdAt: -1 });
+    }
+    res.status(200).json(fonts);
+  } catch (error) {
+    console.error('❌ Error fetching fonts:', error);
+    res.status(500).json({ message: 'Server error while fetching fonts' });
   }
 };
 
 /**
- * 🗑 Delete a font
+ * 🗑️ Delete a font by ID
  */
 export const deleteFont = async (req, res) => {
   try {
-    const font = await Font.findOne({ _id: req.params.id, user: req.user.id });
+    const font = await Font.findById(req.params.id);
     if (!font) {
-      return res.status(404).json({ message: "Font not found" });
+      return res.status(404).json({ message: 'Font not found' });
     }
 
-    // Delete from S3
+    // ✅ Ensure user owns the font OR is admin
+    if (req.user.role !== 'admin' && font.user.toString() !== req.user.id) {
+      return res.status(403).json({ message: 'Not authorized to delete this font' });
+    }
+
+    // ✅ Delete from S3
     await s3
       .deleteObject({
         Bucket: process.env.S3_BUCKET_NAME,
@@ -164,12 +107,12 @@ export const deleteFont = async (req, res) => {
       })
       .promise();
 
-    // Delete from MongoDB
-    await Font.deleteOne({ _id: font._id });
+    // ✅ Delete from MongoDB
+    await font.deleteOne();
 
-    res.json({ message: "Font deleted successfully" });
-  } catch (err) {
-    console.error("❌ Error deleting font:", err);
-    res.status(500).json({ message: "Error deleting font" });
+    res.status(200).json({ message: 'Font deleted successfully' });
+  } catch (error) {
+    console.error('❌ Error deleting font:', error);
+    res.status(500).json({ message: 'Server error while deleting font' });
   }
 };

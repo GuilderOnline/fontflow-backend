@@ -11,15 +11,34 @@ dotenv.config();
 // Initialize app
 const app = express();
 
-// Middleware
-app.use(cors({
-  origin: [
-    "https://fontflow-backend-vhnr.vercel.app", // your frontend on Vercel
-    "http://localhost:3000" // local dev
-  ],
-  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"]
-}));
+// ✅ Allowed origins
+const allowedOrigins = [
+  "https://fontflow-backend-vhnr.vercel.app", // your frontend on Vercel
+  "http://localhost:3000" // local dev
+];
+
+// ✅ CORS middleware
+app.use(
+  cors({
+    origin: function (origin, callback) {
+      // Allow requests with no origin (like mobile apps or curl)
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      } else {
+        return callback(new Error("Not allowed by CORS"));
+      }
+    },
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+    credentials: true
+  })
+);
+
+// ✅ Explicitly handle preflight requests
+app.options("*", cors());
+
+// Body parser & logger
 app.use(express.json());
 app.use(morgan("dev"));
 

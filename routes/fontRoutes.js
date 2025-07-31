@@ -15,7 +15,7 @@ const upload = multer({ storage: multer.memoryStorage() });
 router.get('/admin-only', authenticate, authorizeRoles('admin'), (req, res) => {
   res.send('Only admins can see this.');
 });
-
+ 
 // 📤 Upload font (JWT required)
 router.post('/upload', jwtAuth, upload.single('font'), uploadFont);
 

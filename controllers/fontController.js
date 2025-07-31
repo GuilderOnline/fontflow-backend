@@ -1,7 +1,6 @@
 // controllers/fontController.js
 import AWS from "aws-sdk";
-import fontkit from "fontkit";
-import pkg from "file-type"; // works with ESM
+import * as fontkit from "fontkit"; // ✅ FIXED for ESMimport pkg from "file-type"; // works with ESM
 const { fileTypeFromBuffer } = pkg;
 import Font from "../models/fontModel.js";
 

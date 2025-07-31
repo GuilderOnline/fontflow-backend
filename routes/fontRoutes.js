@@ -34,6 +34,6 @@ router.get('/user', jwtAuth, async (req, res) => {
     console.error('❌ Error fetching user fonts:', err);
     res.status(500).json({ message: 'Error fetching user fonts' });
   }
-});
+}); 
 
 export default router;

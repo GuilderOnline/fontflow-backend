@@ -5,7 +5,7 @@ import * as fontkit from "fontkit";
 import { fileTypeFromBuffer } from "file-type"; // ✅ MINIMUM FIX: direct named import for Render/Node18
 import ttf2woff2 from "ttf2woff2";
 import otf2ttf from "otf2ttf";
-import Font from "../models/fontModel.js";
+import Font from "../models/fontModel.js"; 
 
 // Configure AWS S3
 const s3 = new AWS.S3({

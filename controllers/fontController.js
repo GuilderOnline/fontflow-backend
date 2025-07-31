@@ -1,9 +1,9 @@
 // controllers/fontController.js
 
 import AWS from "aws-sdk";
-import * as fontkit from "fontkit"; // ✅ FIXED for ESM
-import pkg from "file-type";        // ✅ CommonJS import works on Render
-const { fileTypeFromBuffer } = pkg; // ✅ Extract function
+import * as fontkit from "fontkit";
+import pkg from "file-type"; // ✅ CommonJS default import
+const { fileTypeFromBuffer } = pkg; // ✅ Destructure function
 import ttf2woff2 from "ttf2woff2";
 import otf2ttf from "otf2ttf";
 import Font from "../models/fontModel.js";

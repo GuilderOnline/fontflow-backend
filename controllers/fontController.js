@@ -77,12 +77,37 @@ export const uploadFont = async (req, res) => {
 };
 
 /**
- * 📄 Get all fonts for logged-in user
+ * 📄 Get all fonts for logged-in user (with S3 preview URLs)
  */
 export const getAllFonts = async (req, res) => {
   try {
-    const fonts = await Font.find({ user: req.user.id }).sort({ createdAt: -1 });
-    res.json(fonts);
+    const isAdmin = req.user.role === "admin";
+    const fonts = await Font.find(
+      isAdmin ? {} : { user: req.user.id }
+    ).sort({ createdAt: -1 });
+
+    // Attach signed preview URL
+    const fontsWithPreviews = await Promise.all(
+      fonts.map(async (font) => {
+        let signedUrl = null;
+        try {
+          signedUrl = s3.getSignedUrl("getObject", {
+            Bucket: process.env.S3_BUCKET_NAME,
+            Key: font.originalFile,
+            Expires: 3600, // 1 hour
+          });
+        } catch (err) {
+          console.error("⚠️ Failed to generate preview URL:", err);
+        }
+
+        return {
+          ...font.toObject(),
+          previewUrl: signedUrl,
+        };
+      })
+    );
+
+    res.json(fontsWithPreviews);
   } catch (err) {
     console.error("❌ Error fetching fonts:", err);
     res.status(500).json({ message: "Error fetching fonts" });

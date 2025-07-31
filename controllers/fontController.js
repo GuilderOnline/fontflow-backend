@@ -1,7 +1,8 @@
 // controllers/fontController.js
 import AWS from "aws-sdk";
 import * as fontkit from "fontkit"; // ✅ FIXED for ESMimport pkg from "file-type"; // works with ESM
-const { fileTypeFromBuffer } = pkg;
+import pkg from "file-type";        // ✅ Import whole CommonJS package
+const { fileTypeFromBuffer } = pkg; // ✅ Extract the function
 import Font from "../models/fontModel.js";
 
 // Configure AWS S3

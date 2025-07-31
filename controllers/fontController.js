@@ -1,7 +1,7 @@
 // controllers/fontController.js
 import AWS from "aws-sdk";
 import * as fontkit from "fontkit";
-import fileType from "file-type";   // ✅ default import (works on Render/Bun)
+import fileType from "file-type"; // CommonJS import works fine
 import ttf2woff2 from "ttf2woff2";
 import otf2ttf from "otf2ttf";
 import Font from "../models/fontModel.js";
@@ -22,9 +22,8 @@ export const uploadFont = async (req, res) => {
       return res.status(400).json({ message: "No font file uploaded" });
     }
 
-    // ✅ This was the working method before — DO NOT CHANGE
-    const type = await fileType.fromBuffer(req.file.buffer);
-
+    // Detect file type
+    const type = await fileType.fromBuffer(req.file.buffer); // ✅ WORKING VERSION
     let originalBuffer = req.file.buffer;
     let woff2Buffer = null;
 
@@ -99,5 +98,72 @@ export const uploadFont = async (req, res) => {
   } catch (error) {
     console.error("❌ Font upload failed:", error);
     res.status(500).json({ message: "Font upload failed" });
+  }
+};
+
+/**
+ * 📄 Get all fonts for logged-in user
+ */
+export const getAllFonts = async (req, res) => {
+  try {
+    const query = req.user.role === "admin" ? {} : { user: req.user.id };
+    const fonts = await Font.find(query).sort({ createdAt: -1 });
+
+    // Attach signed URLs
+    const fontsWithUrls = fonts.map(font => {
+      const originalUrl = font.originalFile
+        ? s3.getSignedUrl("getObject", {
+            Bucket: process.env.S3_BUCKET_NAME,
+            Key: font.originalFile,
+            Expires: 60 * 5,
+          })
+        : null;
+
+      const woff2Url = font.woff2File
+        ? s3.getSignedUrl("getObject", {
+            Bucket: process.env.S3_BUCKET_NAME,
+            Key: font.woff2File,
+            Expires: 60 * 5,
+          })
+        : null;
+
+      return {
+        ...font.toObject(),
+        originalDownloadUrl: originalUrl,
+        woff2DownloadUrl: woff2Url,
+      };
+    });
+
+    res.status(200).json(fontsWithUrls);
+  } catch (err) {
+    console.error("❌ Error fetching fonts:", err);
+    res.status(500).json({ message: "Error fetching fonts" });
+  }
+};
+
+/**
+ * 🗑 Delete a font
+ */
+export const deleteFont = async (req, res) => {
+  try {
+    const font = await Font.findOne({ _id: req.params.id, user: req.user.id });
+    if (!font) {
+      return res.status(404).json({ message: "Font not found" });
+    }
+
+    // Delete from S3
+    await s3
+      .deleteObject({
+        Bucket: process.env.S3_BUCKET_NAME,
+        Key: font.originalFile,
+      })
+      .promise();
+
+    await Font.deleteOne({ _id: font._id });
+
+    res.json({ message: "Font deleted successfully" });
+  } catch (err) {
+    console.error("❌ Error deleting font:", err);
+    res.status(500).json({ message: "Error deleting font" });
   }
 };

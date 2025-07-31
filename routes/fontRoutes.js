@@ -1,31 +1,31 @@
 // routes/fontRoutes.js
 import express from 'express';
-import { uploadFont, deleteFont, getAllFonts } from '../controllers/fontController.js';
-import apiKeyAuth from '../middleware/apiKeyAuth.js';
-import { jwtAuth } from '../middleware/jwtAuth.js';
 import multer from 'multer';
+import { uploadFont, deleteFont, getAllFonts } from '../controllers/fontController.js';
+import { jwtAuth } from '../middleware/jwtAuth.js';
 import { authenticate, authorizeRoles } from '../middleware/authMiddleware.js';
 import Font from '../models/fontModel.js';
 
+const router = express.Router();
 
-const router = express.Router(); // ✅ Initialize router before use
-
+// Multer memory storage for in-memory buffer upload
 const upload = multer({ storage: multer.memoryStorage() });
 
-// 🔐 Admin-only route (protected by JWT and role check)
+// 🔐 Admin-only example route
 router.get('/admin-only', authenticate, authorizeRoles('admin'), (req, res) => {
   res.send('Only admins can see this.');
 });
 
-// 📤 Upload font (Requires JWT auth)
+// 📤 Upload font (JWT required)
 router.post('/upload', jwtAuth, upload.single('font'), uploadFont);
 
-// 📄 Get all fonts (Requires API key)
-router.get('/', jwtAuth, getAllFonts); // ✅ change to JWT auth for logged-in users
+// 📄 Get all fonts for logged-in user
+router.get('/', jwtAuth, getAllFonts);
 
-// 🗑️ Delete a font (Requires JWT auth)
+// 🗑️ Delete a font by ID (JWT required)
 router.delete('/:id', jwtAuth, deleteFont);
 
+// 📄 Get fonts owned by the logged-in user
 router.get('/user', jwtAuth, async (req, res) => {
   try {
     const fonts = await Font.find({ user: req.user.id }).sort({ createdAt: -1 });
@@ -35,6 +35,5 @@ router.get('/user', jwtAuth, async (req, res) => {
     res.status(500).json({ message: 'Error fetching user fonts' });
   }
 });
-
 
 export default router;

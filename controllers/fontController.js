@@ -1,26 +1,3 @@
-// controllers/fontController.js
-import AWS from "aws-sdk";
-import * as fontkit from "fontkit"; // ✅ FIXED for ESM
-import fileType from "file-type";   // ✅ Import entire package (works on Render's Node + file-type v16)
-import ttf2woff2 from "ttf2woff2";
-import otf2ttf from "otf2ttf";
-import Font from "../models/fontModel.js";
-
-// Configure AWS S3
-const s3 = new AWS.S3({
-  accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-  secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-  region: process.env.AWS_REGION,
-});
-
-/**
- * 📤 Upload a font
- */
-
-
-/**
- * 📤 Upload and process font
- */
 import AWS from 'aws-sdk';
 import * as fontkit from 'fontkit';
 import pkg from 'file-type';

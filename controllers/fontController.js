@@ -1,6 +1,7 @@
 // controllers/fontController.js
 
-import { fileTypeFromBuffer } from 'file-type'; // ✅ ESM named import
+import fileType from 'file-type';
+const { fileTypeFromBuffer } = fileType; // ✅ works for CommonJS default export
 import fs from 'fs';
 import AWS from 'aws-sdk';
 import * as Fontkit from 'fontkit';
@@ -49,19 +50,16 @@ export const uploadFont = async (req, res) => {
     console.log('📂 Incoming file object:', req.file);
 
     if (!req.file) {
-      console.error('❌ No file uploaded in request');
       return res.status(400).json({ error: 'No file uploaded' });
     }
 
-    const buffer = req.file.buffer; // ✅ Directly from multer memoryStorage
+    const buffer = req.file.buffer;
 
-    // Detect file type
     const type = await fileTypeFromBuffer(buffer);
     if (!type || !['font/ttf', 'font/otf', 'application/font-sfnt'].includes(type.mime)) {
       return res.status(400).json({ error: 'Invalid font file type' });
     }
 
-    // Upload to S3
     const s3Key = `${Date.now()}-${req.file.originalname}`;
     await s3.upload({
       Bucket: process.env.S3_BUCKET_NAME,
@@ -70,7 +68,6 @@ export const uploadFont = async (req, res) => {
       ContentType: type.mime,
     }).promise();
 
-    // Extract font metadata from buffer
     const font = Fontkit.openSync(buffer);
     const metadata = {
       family: font.familyName,
@@ -82,7 +79,6 @@ export const uploadFont = async (req, res) => {
       license: font.license || '',
     };
 
-    // Save to DB
     const newFont = await Font.create({
       ...metadata,
       originalFile: s3Key,

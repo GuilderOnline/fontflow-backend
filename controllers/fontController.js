@@ -1,9 +1,9 @@
 import AWS from "aws-sdk";
-import fontkit from "fontkit";
+import * as fontkit from "fontkit"; // ✅ CommonJS compatible import
 import fileType from "file-type";
 import Font from "../models/fontModel.js";
 
-// ✅ Correctly destructure from CommonJS export
+// Correct destructure for CommonJS `file-type`
 const { fileTypeFromBuffer } = fileType;
 
 // Configure S3
@@ -28,15 +28,14 @@ export const uploadFont = async (req, res) => {
       size: req.file.size,
     });
 
-    // Detect file type from buffer
+    // Detect file type
     const detectedType = await fileTypeFromBuffer(req.file.buffer);
     if (!detectedType) {
       return res.status(400).json({ message: "Could not detect file type" });
     }
-
     console.log("📄 Detected file type:", detectedType);
 
-    // Extract metadata from font
+    // Extract metadata
     const font = fontkit.create(req.file.buffer);
     const metadata = {
       family: font.familyName,
@@ -47,7 +46,6 @@ export const uploadFont = async (req, res) => {
       manufacturer: font.manufacturer || null,
       description: font.description || null,
     };
-
     console.log("📝 Extracted metadata:", metadata);
 
     // Upload to S3
@@ -60,17 +58,15 @@ export const uploadFont = async (req, res) => {
         ContentType: detectedType.mime,
       })
       .promise();
-
     console.log(`✅ Uploaded to S3: ${s3Key}`);
 
     // Save to MongoDB
     const newFont = new Font({
       name: req.file.originalname,
       originalFile: s3Key,
-      user: req.user?.id || null, // If using auth middleware
+      user: req.user?.id || null,
       ...metadata,
     });
-
     await newFont.save();
 
     res.json({

@@ -1,25 +1,21 @@
-// fontflow-backend/app.js
+// app.js
 import express from "express";
 import dotenv from "dotenv";
 import cors from "cors";
 import morgan from "morgan";
-import connectDB from "./config/db.js";
-import multer from "multer";
-
-import { uploadFont } from "./controllers/fontController.js";
-
+import connectDB from "./config/db.js"; // ✅ Correct relative path
 
 // Load environment variables
 dotenv.config();
 
-// Create Express app
+// Initialize app
 const app = express();
 
 // Middleware
 app.use(
   cors({
     origin: process.env.FRONTEND_URL || "*", // Allow frontend to connect
-    credentials: true
+    credentials: true,
   })
 );
 app.use(express.json());
@@ -28,22 +24,17 @@ app.use(morgan("dev"));
 // Connect to MongoDB
 connectDB();
 
-// ✅ Multer setup: Use memory storage (no local files)
-const upload = multer({ storage: multer.memoryStorage() });
-
 // Routes
 import authRoutes from "./routes/authRoutes.js";
 import fontRoutes from "./routes/fontRoutes.js";
 import projectRoutes from "./routes/projectsRoutes.js";
 
+// Mount routes
 app.use("/api/auth", authRoutes);
 app.use("/api/fonts", fontRoutes);
 app.use("/api/projects", projectRoutes);
 
-// ✅ Direct font upload route using Multer + Controller
-app.post("/api/fonts/upload", upload.single("font"), uploadFont);
-
-// Health check
+// Health check route
 app.get("/", (req, res) => {
   res.send("FontFlow Backend is running 🚀");
 });

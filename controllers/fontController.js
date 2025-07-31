@@ -109,13 +109,42 @@ export const uploadFont = async (req, res) => {
  */
 export const getAllFonts = async (req, res) => {
   try {
-    const fonts = await Font.find({ user: req.user.id }).sort({ createdAt: -1 });
-    res.json(fonts);
+    // Admins see all fonts, normal users only their own
+    const query = req.user.role === "admin" ? {} : { user: req.user.id };
+    const fonts = await Font.find(query).sort({ createdAt: -1 });
+
+    // Attach fresh signed URLs
+    const fontsWithUrls = fonts.map(font => {
+      const originalUrl = font.originalFile
+        ? s3.getSignedUrl("getObject", {
+            Bucket: process.env.S3_BUCKET_NAME,
+            Key: font.originalFile,
+            Expires: 60 * 5 // 5 min expiry
+          })
+        : null;
+
+      const woff2Url = font.woff2File
+        ? s3.getSignedUrl("getObject", {
+            Bucket: process.env.S3_BUCKET_NAME,
+            Key: font.woff2File,
+            Expires: 60 * 5
+          })
+        : null;
+
+      return {
+        ...font.toObject(),
+        originalDownloadUrl: originalUrl,
+        woff2DownloadUrl: woff2Url
+      };
+    });
+
+    res.status(200).json(fontsWithUrls);
   } catch (err) {
     console.error("❌ Error fetching fonts:", err);
     res.status(500).json({ message: "Error fetching fonts" });
   }
 };
+
 
 /**
  * 🗑 Delete a font

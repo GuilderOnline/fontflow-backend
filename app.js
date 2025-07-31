@@ -8,28 +8,30 @@ import connectDB from "./config/db.js";
 dotenv.config();
 const app = express();
 
-// ✅ CORS must be FIRST middleware
+// ✅ Correct frontend origin for Vercel + local dev
 const allowedOrigins = [
-  "https://fontflow-backend-vhnr.vercel.app", // your Vercel frontend
-  "http://localhost:3000" // local dev
+  "https://fontflow-frontend.vercel.app", // FRONTEND Vercel URL
+  "http://localhost:3000"                 // Local dev
 ];
 
 app.use(cors({
   origin: function (origin, callback) {
-    // Allow requests with no origin (like curl, mobile apps)
+    // Allow requests with no origin (curl, mobile apps)
     if (!origin || allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
+      console.log("❌ CORS blocked:", origin);
       callback(new Error("Not allowed by CORS"));
     }
   },
-  credentials: true, // allow cookies/auth headers
+  credentials: true,
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"]
 }));
 
-// ✅ Explicitly handle preflight requests
+// ✅ Always handle preflight
 app.options("*", cors());
+
 
 // Body parser
 app.use(express.json());

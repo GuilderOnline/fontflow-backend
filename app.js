@@ -5,43 +5,36 @@ import cors from "cors";
 import morgan from "morgan";
 import connectDB from "./config/db.js";
 
-dotenv.config(); 
+dotenv.config();
 const app = express();
 
-// 🔹 Allowed origins
+// 🔹 Allowed origins from environment (comma-separated)
 const allowedOrigins = process.env.ALLOWED_ORIGINS
   ? process.env.ALLOWED_ORIGINS.split(",")
-  : [
-      "http://localhost:3000",
-      "https://fontflow-backend-vhnr.vercel.app"
-    ];
+  : ["http://localhost:3000"];
 
-// 🔹 CORS middleware (allow Authorization header!)
+// 🔹 CORS middleware
 app.use(
   cors({
     origin: function (origin, callback) {
-      if (!origin) return callback(null, true); // Allow server tools
+      // Allow no origin (like Postman or curl)
+      if (!origin) return callback(null, true);
       if (allowedOrigins.includes(origin)) {
         return callback(null, true);
       }
       return callback(new Error("Not allowed by CORS"));
     },
     credentials: true,
-    allowedHeaders: ["Content-Type", "Authorization"], // ✅
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"], // ✅
   })
 );
 
-// 🔹 Ensure preflight requests always pass
-app.options("*", cors());
-
-// 🔹 JSON parsing
+// 🔹 Parse JSON requests
 app.use(express.json());
 
 // 🔹 Logger
 app.use(morgan("dev"));
 
-// 🔹 Connect DB
+// 🔹 Connect to DB
 connectDB();
 
 // 🔹 Routes
@@ -50,7 +43,7 @@ import fontRoutes from "./routes/fontRoutes.js";
 import projectRoutes from "./routes/projectsRoutes.js";
 
 app.use("/api/auth", authRoutes);
-app.use("/api/fonts", fontRoutes); // ✅ Will now pass preflight
+app.use("/api/fonts", fontRoutes);
 app.use("/api/projects", projectRoutes);
 
 // 🔹 Health check
@@ -58,7 +51,7 @@ app.get("/", (req, res) => {
   res.send("FontFlow Backend is running 🚀");
 });
 
-// 🔹 Start
+// 🔹 Start server
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);

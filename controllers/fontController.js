@@ -1,16 +1,11 @@
 // controllers/fontController.js
 import AWS from "aws-sdk";
 import * as fontkit from "fontkit";
-
-// ⬅️ FIX — import whole package and destructure fromBuffer function
-import fileType from "file-type"; // CommonJS compat
-const { fromBuffer } = fileType; // ⬅️ FIX
-
+import { fileTypeFromBuffer } from "file-type";
 import ttf2woff2 from "ttf2woff2";
 import otf2ttf from "otf2ttf";
 import Font from "../models/fontModel.js";
 
-// Configure AWS S3
 const s3 = new AWS.S3({
   accessKeyId: process.env.AWS_ACCESS_KEY_ID,
   secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
@@ -26,16 +21,16 @@ export const uploadFont = async (req, res) => {
       return res.status(400).json({ message: "No font file uploaded" });
     }
 
-    // ⬅️ FIX — use fromBuffer instead of fileTypeFromBuffer
-    const type = await fromBuffer(req.file.buffer); // ⬅️ FIX
-    let originalBuffer = req.file.buffer;
+    // Detect file type
+    const type = await fileTypeFromBuffer(req.file.buffer);
+
+    const originalBuffer = req.file.buffer;
     let woff2Buffer = null;
 
-    // Generate unique names
     const baseName = req.file.originalname.replace(/\.[^/.]+$/, "");
     const timestamp = Date.now();
 
-    // Upload original file
+    // Upload original font
     const originalExt = type?.ext || "ttf";
     const originalKey = `${timestamp}-${baseName}.${originalExt}`;
     await s3
@@ -55,7 +50,7 @@ export const uploadFont = async (req, res) => {
       }
       woff2Buffer = Buffer.from(ttf2woff2(ttfBuffer));
     } else if (["woff", "woff2"].includes(originalExt)) {
-      woff2Buffer = originalBuffer; // No conversion needed
+      woff2Buffer = originalBuffer;
     }
 
     // Upload WOFF2 version
@@ -69,7 +64,7 @@ export const uploadFont = async (req, res) => {
       })
       .promise();
 
-    // Create signed download URLs (valid for 7 days)
+    // Create signed URLs
     const originalUrl = s3.getSignedUrl("getObject", {
       Bucket: process.env.S3_BUCKET_NAME,
       Key: originalKey,
@@ -82,10 +77,8 @@ export const uploadFont = async (req, res) => {
       Expires: 7 * 24 * 60 * 60,
     });
 
-    // Extract metadata
     const font = fontkit.create(woff2Buffer);
 
-    // Save in MongoDB
     const newFont = await Font.create({
       name: req.file.originalname,
       originalFile: originalKey,
@@ -106,38 +99,30 @@ export const uploadFont = async (req, res) => {
 };
 
 /**
- * 📄 Get all fonts for logged-in user
+ * 📄 Get all fonts
  */
 export const getAllFonts = async (req, res) => {
   try {
-    // Admins see all fonts, normal users only their own
     const query = req.user.role === "admin" ? {} : { user: req.user.id };
-    const fonts = await Font.find(query).sort({ createdAt: -1 });
+    const fonts = await Font.find(query).sort({ createdAt: -1);
 
-    // Attach fresh signed URLs
-    const fontsWithUrls = fonts.map((font) => {
-      const originalUrl = font.originalFile
+    const fontsWithUrls = fonts.map((font) => ({
+      ...font.toObject(),
+      originalDownloadUrl: font.originalFile
         ? s3.getSignedUrl("getObject", {
             Bucket: process.env.S3_BUCKET_NAME,
             Key: font.originalFile,
-            Expires: 60 * 5, // 5 min expiry
+            Expires: 60 * 5,
           })
-        : null;
-
-      const woff2Url = font.woff2File
+        : null,
+      woff2DownloadUrl: font.woff2File
         ? s3.getSignedUrl("getObject", {
             Bucket: process.env.S3_BUCKET_NAME,
             Key: font.woff2File,
             Expires: 60 * 5,
           })
-        : null;
-
-      return {
-        ...font.toObject(),
-        originalDownloadUrl: originalUrl,
-        woff2DownloadUrl: woff2Url,
-      };
-    });
+        : null,
+    }));
 
     res.status(200).json(fontsWithUrls);
   } catch (err) {
@@ -156,7 +141,6 @@ export const deleteFont = async (req, res) => {
       return res.status(404).json({ message: "Font not found" });
     }
 
-    // Delete from S3
     await s3
       .deleteObject({
         Bucket: process.env.S3_BUCKET_NAME,
@@ -164,7 +148,6 @@ export const deleteFont = async (req, res) => {
       })
       .promise();
 
-    // Delete from MongoDB
     await Font.deleteOne({ _id: font._id });
 
     res.json({ message: "Font deleted successfully" });

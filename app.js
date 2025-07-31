@@ -5,7 +5,6 @@ import cors from "cors";
 import morgan from "morgan";
 import connectDB from "./config/db.js";
 
-import express from 'express';
 import { fileTypeFromBuffer } from 'file-type';
 const app1 = express();
 

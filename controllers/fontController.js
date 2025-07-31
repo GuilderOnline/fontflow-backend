@@ -3,7 +3,7 @@ import AWS from "aws-sdk";
 import * as fontkit from "fontkit"; // ✅ FIXED for ESM
 import fileType from "file-type";   // ✅ Import entire package (works on Render's Node + file-type v16)
 import Font from "../models/fontModel.js";
-import { ensureWoff2 } from "../utils/fontConversion.js";
+import { ensureWoff2 } from "..src/utils/fontConversion.js";
 
 
 // Configure AWS S3

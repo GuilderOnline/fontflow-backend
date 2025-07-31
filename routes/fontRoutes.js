@@ -21,9 +21,6 @@ router.post('/upload', jwtAuth, upload.single('font'), uploadFont);
 
 // 📄 Get all fonts for logged-in user
 router.get('/', jwtAuth, getAllFonts);
-
-// 🗑️ Delete a font by ID (JWT required)
-router.delete('/:id', jwtAuth, deleteFont);
  
 // 📄 Get fonts owned by the logged-in user
 router.get('/user', jwtAuth, async (req, res) => {
@@ -34,6 +31,8 @@ router.get('/user', jwtAuth, async (req, res) => {
     console.error('❌ Error fetching user fonts:', err);
     res.status(500).json({ message: 'Error fetching user fonts' });
   }
+  // 🗑️ Delete a font by ID (JWT required)
+router.delete('/:id', jwtAuth, deleteFont);
 });
 
 export default router;

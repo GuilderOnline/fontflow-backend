@@ -1,8 +1,7 @@
 // controllers/fontController.js
 import AWS from "aws-sdk";
-import * as fontkit from "fontkit"; // ✅ FIXED for ESMimport pkg from "file-type"; // works with ESM
-import pkg from "file-type";        // ✅ Import whole CommonJS package
-const { fileTypeFromBuffer } = pkg; // ✅ Extract the function
+import * as fontkit from "fontkit"; // ✅ FIXED for ESM
+import fileType from "file-type";   // ✅ Import entire package (works on Render's Node + file-type v16)
 import Font from "../models/fontModel.js";
 
 // Configure AWS S3
@@ -21,8 +20,8 @@ export const uploadFont = async (req, res) => {
       return res.status(400).json({ message: "No font file uploaded" });
     }
 
-    // 1️⃣ Detect file type
-    const type = await fileTypeFromBuffer(req.file.buffer);
+    // 1️⃣ Detect file type (old API on Render)
+    const type = await fileType.fromBuffer(req.file.buffer);
     if (!type || !["ttf", "otf", "woff", "woff2", "eot"].includes(type.ext)) {
       return res.status(400).json({ message: "Invalid font format" });
     }

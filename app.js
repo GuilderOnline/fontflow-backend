@@ -5,7 +5,7 @@ import cors from "cors";
 import morgan from "morgan";
 import connectDB from "./config/db.js";
 
-dotenv.config();
+dotenv.config(); 
 const app = express();
 
 // 🔹 Allowed origins

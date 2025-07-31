@@ -104,7 +104,7 @@ export const uploadFont = async (req, res) => {
 export const getAllFonts = async (req, res) => {
   try {
     const query = req.user.role === "admin" ? {} : { user: req.user.id };
-    const fonts = await Font.find(query).sort({ createdAt: -1);
+    const fonts = await Font.find(query).sort({ createdAt: -1});
 
     const fontsWithUrls = fonts.map((font) => ({
       ...font.toObject(),

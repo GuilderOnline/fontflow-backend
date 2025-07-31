@@ -2,6 +2,8 @@
 import AWS from "aws-sdk";
 import * as fontkit from "fontkit"; // ✅ FIXED for ESM
 import fileType from "file-type";   // ✅ Import entire package (works on Render's Node + file-type v16)
+import ttf2woff2 from "ttf2woff2";
+import otf2ttf from "otf2ttf";
 import Font from "../models/fontModel.js";
 
 // Configure AWS S3
@@ -14,67 +16,94 @@ const s3 = new AWS.S3({
 /**
  * 📤 Upload a font
  */
+
+
+/**
+ * 📤 Upload and process font
+ */
 export const uploadFont = async (req, res) => {
   try {
     if (!req.file || !req.file.buffer) {
       return res.status(400).json({ message: "No font file uploaded" });
     }
 
-    // 1️⃣ Detect file type (old API on Render)
-    const type = await fileType.fromBuffer(req.file.buffer);
-    if (!type || !["ttf", "otf", "woff", "woff2", "eot"].includes(type.ext)) {
-      return res.status(400).json({ message: "Invalid font format" });
-    }
+    const type = await fileTypeFromBuffer(req.file.buffer);
+    let originalBuffer = req.file.buffer;
+    let woff2Buffer = null;
 
-    // 2️⃣ Parse font metadata from memory
-    let font;
-    try {
-      font = fontkit.create(req.file.buffer);
-    } catch (err) {
-      console.error("❌ Font parsing error:", err);
-      return res.status(400).json({ message: "Unable to parse font file" });
-    }
+    // Generate unique names
+    const baseName = req.file.originalname.replace(/\.[^/.]+$/, "");
+    const timestamp = Date.now();
 
-    const fontMetadata = {
-      family: font.familyName || "",
-      fullName: font.fullName || "",
-      postscriptName: font.postscriptName || "",
-      style: font.subfamilyName || "",
-      weight: font["OS/2"]?.usWeightClass || null,
-      manufacturer: font.manufacturer || "",
-    };
-
-    // 3️⃣ Upload to S3
-    const s3Key = `${Date.now()}-${req.file.originalname}`;
+    // Upload original file
+    const originalExt = type?.ext || "ttf";
+    const originalKey = `${timestamp}-${baseName}.${originalExt}`;
     await s3
       .putObject({
         Bucket: process.env.S3_BUCKET_NAME,
-        Key: s3Key,
-        Body: req.file.buffer,
-        ContentType: type.mime,
+        Key: originalKey,
+        Body: originalBuffer,
+        ContentType: type?.mime || "application/octet-stream",
       })
       .promise();
 
-    // 4️⃣ Save metadata to MongoDB
-    const newFont = new Font({
+    // Convert to WOFF2 if needed
+    if (["ttf", "otf"].includes(originalExt)) {
+      let ttfBuffer = originalBuffer;
+      if (originalExt === "otf") {
+        ttfBuffer = Buffer.from(otf2ttf(originalBuffer));
+      }
+      woff2Buffer = Buffer.from(ttf2woff2(ttfBuffer));
+    } else if (["woff", "woff2"].includes(originalExt)) {
+      woff2Buffer = originalBuffer; // No conversion needed
+    }
+
+    // Upload WOFF2 version
+    const woff2Key = `${timestamp}-${baseName}.woff2`;
+    await s3
+      .putObject({
+        Bucket: process.env.S3_BUCKET_NAME,
+        Key: woff2Key,
+        Body: woff2Buffer,
+        ContentType: "font/woff2",
+      })
+      .promise();
+
+    // Create signed download URLs (valid for 7 days)
+    const originalUrl = s3.getSignedUrl("getObject", {
+      Bucket: process.env.S3_BUCKET_NAME,
+      Key: originalKey,
+      Expires: 7 * 24 * 60 * 60,
+    });
+
+    const woff2Url = s3.getSignedUrl("getObject", {
+      Bucket: process.env.S3_BUCKET_NAME,
+      Key: woff2Key,
+      Expires: 7 * 24 * 60 * 60,
+    });
+
+    // Extract metadata
+    const font = fontkit.create(woff2Buffer);
+
+    // Save in MongoDB
+    const newFont = await Font.create({
       name: req.file.originalname,
-      originalFile: s3Key,
+      originalFile: originalKey,
+      woff2File: woff2Key,
       user: req.user.id,
-      ...fontMetadata,
+      family: font.familyName || "",
+      fullName: font.fullName || "",
+      style: font.subfamilyName || "",
+      originalDownloadUrl: originalUrl,
+      woff2DownloadUrl: woff2Url,
     });
 
-    await newFont.save();
-
-    res.status(201).json({
-      message: "Font uploaded successfully",
-      font: newFont,
-    });
-  } catch (err) {
-    console.error("❌ Error uploading font:", err);
-    res.status(500).json({ message: "Error uploading font" });
+    res.json(newFont);
+  } catch (error) {
+    console.error("❌ Font upload failed:", error);
+    res.status(500).json({ message: "Font upload failed" });
   }
 };
-
 /**
  * 📄 Get all fonts for logged-in user
  */

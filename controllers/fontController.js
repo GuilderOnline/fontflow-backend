@@ -1,67 +1,66 @@
 // controllers/fontController.js
-import fs from "fs";
-import path from "path";
 import AWS from "aws-sdk";
+import fontkit from "fontkit";
+import pkg from "file-type"; // works with ESM
+const { fileTypeFromBuffer } = pkg;
 import Font from "../models/fontModel.js";
 
-// ✅ Allow CommonJS require in ESM
-import { createRequire } from "module";
-const require = createRequire(import.meta.url);
-
-// ✅ fontkit is CommonJS-only, so require it
-const fontkit = require("fontkit");
-
-// ✅ file-type is pure ESM, so import directly
-import { fileTypeFromBuffer } from "file-type";
-
-// ✅ Configure AWS S3
+// Configure AWS S3
 const s3 = new AWS.S3({
   accessKeyId: process.env.AWS_ACCESS_KEY_ID,
   secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-  region: process.env.AWS_REGION || "eu-west-1",
+  region: process.env.AWS_REGION,
 });
 
-// 📤 UPLOAD FONT
+/**
+ * 📤 Upload a font
+ */
 export const uploadFont = async (req, res) => {
   try {
-    if (!req.file) {
+    if (!req.file || !req.file.buffer) {
       return res.status(400).json({ message: "No font file uploaded" });
     }
 
-    // ✅ Detect file type from buffer
-    const fileType = await fileTypeFromBuffer(req.file.buffer);
-    if (!fileType || !["ttf", "otf", "woff", "woff2", "eot"].includes(fileType.ext)) {
-      return res.status(400).json({ message: "Invalid font file type" });
+    // 1️⃣ Detect file type
+    const type = await fileTypeFromBuffer(req.file.buffer);
+    if (!type || !["ttf", "otf", "woff", "woff2", "eot"].includes(type.ext)) {
+      return res.status(400).json({ message: "Invalid font format" });
     }
 
-    // ✅ Parse font metadata
-    const font = fontkit.create(req.file.buffer);
+    // 2️⃣ Parse font metadata from memory
+    let font;
+    try {
+      font = fontkit.create(req.file.buffer);
+    } catch (err) {
+      console.error("❌ Font parsing error:", err);
+      return res.status(400).json({ message: "Unable to parse font file" });
+    }
+
     const fontMetadata = {
-      family: font.familyName,
-      fullName: font.fullName,
-      postscriptName: font.postscriptName,
-      style: font.subfamilyName,
+      family: font.familyName || "",
+      fullName: font.fullName || "",
+      postscriptName: font.postscriptName || "",
+      style: font.subfamilyName || "",
       weight: font["OS/2"]?.usWeightClass || null,
       manufacturer: font.manufacturer || "",
     };
 
-    // ✅ Prepare S3 upload
+    // 3️⃣ Upload to S3
     const s3Key = `${Date.now()}-${req.file.originalname}`;
-
     await s3
-      .upload({
+      .putObject({
         Bucket: process.env.S3_BUCKET_NAME,
         Key: s3Key,
         Body: req.file.buffer,
-        ContentType: req.file.mimetype,
+        ContentType: type.mime,
       })
       .promise();
 
-    // ✅ Save to MongoDB
+    // 4️⃣ Save metadata to MongoDB
     const newFont = new Font({
       name: req.file.originalname,
       originalFile: s3Key,
-      user: req.user.id, // from JWT auth
+      user: req.user.id,
       ...fontMetadata,
     });
 
@@ -77,26 +76,30 @@ export const uploadFont = async (req, res) => {
   }
 };
 
-// 📄 GET ALL FONTS
+/**
+ * 📄 Get all fonts for logged-in user
+ */
 export const getAllFonts = async (req, res) => {
   try {
-    const fonts = await Font.find().sort({ createdAt: -1 });
-    res.status(200).json(fonts);
+    const fonts = await Font.find({ user: req.user.id }).sort({ createdAt: -1 });
+    res.json(fonts);
   } catch (err) {
     console.error("❌ Error fetching fonts:", err);
     res.status(500).json({ message: "Error fetching fonts" });
   }
 };
 
-// 🗑️ DELETE FONT
+/**
+ * 🗑 Delete a font
+ */
 export const deleteFont = async (req, res) => {
   try {
-    const font = await Font.findById(req.params.id);
+    const font = await Font.findOne({ _id: req.params.id, user: req.user.id });
     if (!font) {
       return res.status(404).json({ message: "Font not found" });
     }
 
-    // ✅ Delete from S3
+    // Delete from S3
     await s3
       .deleteObject({
         Bucket: process.env.S3_BUCKET_NAME,
@@ -104,10 +107,10 @@ export const deleteFont = async (req, res) => {
       })
       .promise();
 
-    // ✅ Delete from MongoDB
-    await font.deleteOne();
+    // Delete from MongoDB
+    await Font.deleteOne({ _id: font._id });
 
-    res.status(200).json({ message: "Font deleted successfully" });
+    res.json({ message: "Font deleted successfully" });
   } catch (err) {
     console.error("❌ Error deleting font:", err);
     res.status(500).json({ message: "Error deleting font" });

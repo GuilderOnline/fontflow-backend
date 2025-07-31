@@ -24,7 +24,7 @@ router.get('/', jwtAuth, getAllFonts);
 
 // 🗑️ Delete a font by ID (JWT required)
 router.delete('/:id', jwtAuth, deleteFont);
-
+ 
 // 📄 Get fonts owned by the logged-in user
 router.get('/user', jwtAuth, async (req, res) => {
   try {

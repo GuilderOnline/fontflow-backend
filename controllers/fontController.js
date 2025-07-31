@@ -16,15 +16,31 @@ const s3 = new AWS.S3({
 /**
  * 📤 Upload and process font
  */
+/**
+ * 📤 Upload and process font
+ */
 export const uploadFont = async (req, res) => {
   try {
-    if (!req.file || !req.file.buffer) {
+    if (!req.file) {
       return res.status(400).json({ message: "No font file uploaded" });
     }
 
-    // Detect file type
-    const type = await fileType.fromBuffer(req.file.buffer); // ✅ WORKING VERSION
-    let originalBuffer = req.file.buffer;
+    // 🔹 CHANGED: Ensure we always have a real Buffer, even if multer gives a stream
+    let originalBuffer;
+    if (req.file.buffer) {
+      originalBuffer = req.file.buffer; // already a Buffer
+    } else if (req.file.stream || typeof req.file[Symbol.asyncIterator] === "function") {
+      const chunks = [];
+      for await (const chunk of (req.file.stream ?? req.file)) {
+        chunks.push(chunk);
+      }
+      originalBuffer = Buffer.concat(chunks);
+    } else {
+      throw new Error("Unable to read uploaded file as Buffer");
+    }
+    // 🔹 CHANGED END
+
+    const type = await fileTypeFromBuffer(originalBuffer);
     let woff2Buffer = null;
 
     // Generate unique names
@@ -34,14 +50,12 @@ export const uploadFont = async (req, res) => {
     // Upload original file
     const originalExt = type?.ext || "ttf";
     const originalKey = `${timestamp}-${baseName}.${originalExt}`;
-    await s3
-      .putObject({
-        Bucket: process.env.S3_BUCKET_NAME,
-        Key: originalKey,
-        Body: originalBuffer,
-        ContentType: type?.mime || "application/octet-stream",
-      })
-      .promise();
+    await s3.putObject({
+      Bucket: process.env.S3_BUCKET_NAME,
+      Key: originalKey,
+      Body: originalBuffer,
+      ContentType: type?.mime || "application/octet-stream",
+    }).promise();
 
     // Convert to WOFF2 if needed
     if (["ttf", "otf"].includes(originalExt)) {
@@ -56,16 +70,14 @@ export const uploadFont = async (req, res) => {
 
     // Upload WOFF2 version
     const woff2Key = `${timestamp}-${baseName}.woff2`;
-    await s3
-      .putObject({
-        Bucket: process.env.S3_BUCKET_NAME,
-        Key: woff2Key,
-        Body: woff2Buffer,
-        ContentType: "font/woff2",
-      })
-      .promise();
+    await s3.putObject({
+      Bucket: process.env.S3_BUCKET_NAME,
+      Key: woff2Key,
+      Body: woff2Buffer,
+      ContentType: "font/woff2",
+    }).promise();
 
-    // Create signed download URLs (valid for 7 days)
+    // Create signed URLs
     const originalUrl = s3.getSignedUrl("getObject", {
       Bucket: process.env.S3_BUCKET_NAME,
       Key: originalKey,
@@ -81,7 +93,7 @@ export const uploadFont = async (req, res) => {
     // Extract metadata
     const font = fontkit.create(woff2Buffer);
 
-    // Save in MongoDB
+    // Save in DB
     const newFont = await Font.create({
       name: req.file.originalname,
       originalFile: originalKey,
@@ -100,6 +112,7 @@ export const uploadFont = async (req, res) => {
     res.status(500).json({ message: "Font upload failed" });
   }
 };
+
 
 /**
  * 📄 Get all fonts for logged-in user

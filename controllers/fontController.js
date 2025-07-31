@@ -1,8 +1,7 @@
 // controllers/fontController.js
 import AWS from "aws-sdk";
 import * as fontkit from "fontkit";
-import pkg from "file-type"; // ✅ CommonJS default import so Bun + Node18 works
-const { fileTypeFromBuffer } = pkg; // ✅ Extract function from package
+import fileType from "file-type"; // ✅ CommonJS safe import for Bun + Node18
 import ttf2woff2 from "ttf2woff2";
 import otf2ttf from "otf2ttf";
 import Font from "../models/fontModel.js";
@@ -15,7 +14,7 @@ const s3 = new AWS.S3({
 });
 
 /**
- * 📤 Upload a font
+ * 📤 Upload and process font
  */
 export const uploadFont = async (req, res) => {
   try {
@@ -23,11 +22,11 @@ export const uploadFont = async (req, res) => {
       return res.status(400).json({ message: "No font file uploaded" });
     }
 
-    const type = await fileTypeFromBuffer(req.file.buffer);
+    // ✅ FIXED: Use fileType.fileTypeFromBuffer instead of destructure
+    const type = await fileType.fileTypeFromBuffer(req.file.buffer);
     let originalBuffer = req.file.buffer;
     let woff2Buffer = null;
 
-    // Generate unique names
     const baseName = req.file.originalname.replace(/\.[^/.]+$/, "");
     const timestamp = Date.now();
 
@@ -51,7 +50,7 @@ export const uploadFont = async (req, res) => {
       }
       woff2Buffer = Buffer.from(ttf2woff2(ttfBuffer));
     } else if (["woff", "woff2"].includes(originalExt)) {
-      woff2Buffer = originalBuffer; // No conversion needed
+      woff2Buffer = originalBuffer;
     }
 
     // Upload WOFF2 version
@@ -65,7 +64,7 @@ export const uploadFont = async (req, res) => {
       })
       .promise();
 
-    // Create signed download URLs (valid for 7 days)
+    // Create signed download URLs
     const originalUrl = s3.getSignedUrl("getObject", {
       Bucket: process.env.S3_BUCKET_NAME,
       Key: originalKey,
@@ -81,7 +80,7 @@ export const uploadFont = async (req, res) => {
     // Extract metadata
     const font = fontkit.create(woff2Buffer);
 
-    // Save in MongoDB
+    // Save to MongoDB
     const newFont = await Font.create({
       name: req.file.originalname,
       originalFile: originalKey,
@@ -106,17 +105,15 @@ export const uploadFont = async (req, res) => {
  */
 export const getAllFonts = async (req, res) => {
   try {
-    // Admins see all fonts, normal users only their own
     const query = req.user.role === "admin" ? {} : { user: req.user.id };
     const fonts = await Font.find(query).sort({ createdAt: -1 });
 
-    // Attach fresh signed URLs
     const fontsWithUrls = fonts.map(font => {
       const originalUrl = font.originalFile
         ? s3.getSignedUrl("getObject", {
             Bucket: process.env.S3_BUCKET_NAME,
             Key: font.originalFile,
-            Expires: 60 * 5 // 5 min expiry
+            Expires: 60 * 5
           })
         : null;
 
@@ -152,7 +149,6 @@ export const deleteFont = async (req, res) => {
       return res.status(404).json({ message: "Font not found" });
     }
 
-    // Delete from S3
     await s3
       .deleteObject({
         Bucket: process.env.S3_BUCKET_NAME,
@@ -160,7 +156,6 @@ export const deleteFont = async (req, res) => {
       })
       .promise();
 
-    // Delete from MongoDB
     await Font.deleteOne({ _id: font._id });
 
     res.json({ message: "Font deleted successfully" });

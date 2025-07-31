@@ -18,8 +18,12 @@ const allowedOrigins = process.env.ALLOWED_ORIGINS
 app.use(
   cors({
     origin: function (origin, callback) {
+        console.log("🔍 Incoming request origin:", origin); // Debug log
+
       if (!origin) return callback(null, true); // allow Postman / curl
       if (allowedOrigins.includes(origin)) {
+          console.log("✅ CORS allowed for:", origin);
+
         return callback(null, true);
       }
       console.warn(`❌ CORS blocked request from: ${origin}`);

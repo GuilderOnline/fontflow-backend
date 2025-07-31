@@ -1,11 +1,10 @@
 // controllers/fontController.js
 import AWS from "aws-sdk";
-import * as fontkit from "fontkit";
-import { fileTypeFromBuffer } from "file-type";
-import ttf2woff2 from "ttf2woff2";
-import otf2ttf from "otf2ttf";
+import * as fontkit from "fontkit"; // ✅ FIXED for ESM
+import fileType from "file-type";   // ✅ Import entire package (works on Render's Node + file-type v16)
 import Font from "../models/fontModel.js";
 
+// Configure AWS S3
 const s3 = new AWS.S3({
   accessKeyId: process.env.AWS_ACCESS_KEY_ID,
   secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
@@ -13,7 +12,7 @@ const s3 = new AWS.S3({
 });
 
 /**
- * 📤 Upload and process font
+ * 📤 Upload a font
  */
 export const uploadFont = async (req, res) => {
   try {
@@ -21,110 +20,68 @@ export const uploadFont = async (req, res) => {
       return res.status(400).json({ message: "No font file uploaded" });
     }
 
-    // Detect file type
-    const type = await fileTypeFromBuffer(req.file.buffer);
-
-    const originalBuffer = req.file.buffer;
-    let woff2Buffer = null;
-
-    const baseName = req.file.originalname.replace(/\.[^/.]+$/, "");
-    const timestamp = Date.now();
-
-    // Upload original font
-    const originalExt = type?.ext || "ttf";
-    const originalKey = `${timestamp}-${baseName}.${originalExt}`;
-    await s3
-      .putObject({
-        Bucket: process.env.S3_BUCKET_NAME,
-        Key: originalKey,
-        Body: originalBuffer,
-        ContentType: type?.mime || "application/octet-stream",
-      })
-      .promise();
-
-    // Convert to WOFF2 if needed
-    if (["ttf", "otf"].includes(originalExt)) {
-      let ttfBuffer = originalBuffer;
-      if (originalExt === "otf") {
-        ttfBuffer = Buffer.from(otf2ttf(originalBuffer));
-      }
-      woff2Buffer = Buffer.from(ttf2woff2(ttfBuffer));
-    } else if (["woff", "woff2"].includes(originalExt)) {
-      woff2Buffer = originalBuffer;
+    // 1️⃣ Detect file type (old API on Render)
+    const type = await fileType.fromBuffer(req.file.buffer);
+    if (!type || !["ttf", "otf", "woff", "woff2", "eot"].includes(type.ext)) {
+      return res.status(400).json({ message: "Invalid font format" });
     }
 
-    // Upload WOFF2 version
-    const woff2Key = `${timestamp}-${baseName}.woff2`;
+    // 2️⃣ Parse font metadata from memory
+    let font;
+    try {
+      font = fontkit.create(req.file.buffer);
+    } catch (err) {
+      console.error("❌ Font parsing error:", err);
+      return res.status(400).json({ message: "Unable to parse font file" });
+    }
+
+    const fontMetadata = {
+      family: font.familyName || "",
+      fullName: font.fullName || "",
+      postscriptName: font.postscriptName || "",
+      style: font.subfamilyName || "",
+      weight: font["OS/2"]?.usWeightClass || null,
+      manufacturer: font.manufacturer || "",
+    };
+
+    // 3️⃣ Upload to S3
+    const s3Key = `${Date.now()}-${req.file.originalname}`;
     await s3
       .putObject({
         Bucket: process.env.S3_BUCKET_NAME,
-        Key: woff2Key,
-        Body: woff2Buffer,
-        ContentType: "font/woff2",
+        Key: s3Key,
+        Body: req.file.buffer,
+        ContentType: type.mime,
       })
       .promise();
 
-    // Create signed URLs
-    const originalUrl = s3.getSignedUrl("getObject", {
-      Bucket: process.env.S3_BUCKET_NAME,
-      Key: originalKey,
-      Expires: 7 * 24 * 60 * 60,
-    });
-
-    const woff2Url = s3.getSignedUrl("getObject", {
-      Bucket: process.env.S3_BUCKET_NAME,
-      Key: woff2Key,
-      Expires: 7 * 24 * 60 * 60,
-    });
-
-    const font = fontkit.create(woff2Buffer);
-
-    const newFont = await Font.create({
+    // 4️⃣ Save metadata to MongoDB
+    const newFont = new Font({
       name: req.file.originalname,
-      originalFile: originalKey,
-      woff2File: woff2Key,
+      originalFile: s3Key,
       user: req.user.id,
-      family: font.familyName || "",
-      fullName: font.fullName || "",
-      style: font.subfamilyName || "",
-      originalDownloadUrl: originalUrl,
-      woff2DownloadUrl: woff2Url,
+      ...fontMetadata,
     });
 
-    res.json(newFont);
-  } catch (error) {
-    console.error("❌ Font upload failed:", error);
-    res.status(500).json({ message: "Font upload failed" });
+    await newFont.save();
+
+    res.status(201).json({
+      message: "Font uploaded successfully",
+      font: newFont,
+    });
+  } catch (err) {
+    console.error("❌ Error uploading font:", err);
+    res.status(500).json({ message: "Error uploading font" });
   }
 };
 
 /**
- * 📄 Get all fonts
+ * 📄 Get all fonts for logged-in user
  */
 export const getAllFonts = async (req, res) => {
   try {
-    const query = req.user.role === "admin" ? {} : { user: req.user.id };
-    const fonts = await Font.find(query).sort({ createdAt: -1});
-
-    const fontsWithUrls = fonts.map((font) => ({
-      ...font.toObject(),
-      originalDownloadUrl: font.originalFile
-        ? s3.getSignedUrl("getObject", {
-            Bucket: process.env.S3_BUCKET_NAME,
-            Key: font.originalFile,
-            Expires: 60 * 5,
-          })
-        : null,
-      woff2DownloadUrl: font.woff2File
-        ? s3.getSignedUrl("getObject", {
-            Bucket: process.env.S3_BUCKET_NAME,
-            Key: font.woff2File,
-            Expires: 60 * 5,
-          })
-        : null,
-    }));
-
-    res.status(200).json(fontsWithUrls);
+    const fonts = await Font.find({ user: req.user.id }).sort({ createdAt: -1 });
+    res.json(fonts);
   } catch (err) {
     console.error("❌ Error fetching fonts:", err);
     res.status(500).json({ message: "Error fetching fonts" });
@@ -141,6 +98,7 @@ export const deleteFont = async (req, res) => {
       return res.status(404).json({ message: "Font not found" });
     }
 
+    // Delete from S3
     await s3
       .deleteObject({
         Bucket: process.env.S3_BUCKET_NAME,
@@ -148,6 +106,7 @@ export const deleteFont = async (req, res) => {
       })
       .promise();
 
+    // Delete from MongoDB
     await Font.deleteOne({ _id: font._id });
 
     res.json({ message: "Font deleted successfully" });

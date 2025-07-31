@@ -7,21 +7,21 @@ import { authenticate, authorizeRoles } from '../middleware/authMiddleware.js';
 import Font from '../models/fontModel.js';
 
 const router = express.Router();
- 
-// ✅ Multer memory storage for in-memory buffer upload
+
+// Multer memory storage for in-memory buffer upload
 const upload = multer({ storage: multer.memoryStorage() });
 
 // 🔐 Admin-only example route
 router.get('/admin-only', authenticate, authorizeRoles('admin'), (req, res) => {
   res.send('Only admins can see this.');
 });
-
+  
 // 📤 Upload font (JWT required)
 router.post('/upload', jwtAuth, upload.single('font'), uploadFont);
 
 // 📄 Get all fonts for logged-in user
 router.get('/', jwtAuth, getAllFonts);
-
+ 
 // 📄 Get fonts owned by the logged-in user
 router.get('/user', jwtAuth, async (req, res) => {
   try {
@@ -31,9 +31,8 @@ router.get('/user', jwtAuth, async (req, res) => {
     console.error('❌ Error fetching user fonts:', err);
     res.status(500).json({ message: 'Error fetching user fonts' });
   }
-});
-
-// 🗑️ Delete a font by ID (JWT required)
+  // 🗑️ Delete a font by ID (JWT required)
 router.delete('/:id', jwtAuth, deleteFont);
+});
 
 export default router;

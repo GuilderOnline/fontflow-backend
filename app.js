@@ -5,6 +5,19 @@ import cors from "cors";
 import morgan from "morgan";
 import connectDB from "./config/db.js";
 
+import express from 'express';
+import { fileTypeFromBuffer } from 'file-type';
+const app1 = express();
+
+app1.get('/test-filetype', async (req, res) => {
+  const buf = Buffer.from('Test content'); // not a real font
+  res.json({
+    fileTypeFromBufferExists: typeof fileTypeFromBuffer === 'function'
+  });
+});
+
+export default app1;
+
 dotenv.config();
 
 const app = express();

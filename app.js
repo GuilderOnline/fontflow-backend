@@ -8,7 +8,7 @@ import multer from "multer";
 
 import { uploadFont } from "./controllers/fontController.js";
 import fileType from 'file-type';
-import pkg from 'file-type/package.json';
+import pkg from 'file-type/package.json' assert { type: 'json' };
 
 console.log("📦 file-type version on Render:", pkg.version);
 console.log("📦 file-type keys:", Object.keys(fileType));

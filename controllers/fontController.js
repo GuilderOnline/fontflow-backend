@@ -47,17 +47,14 @@ export const getAllFonts = async (req, res) => {
 // Upload font file to S3
 export const uploadFont = async (req, res) => {
   try {
-    console.log('📂 Incoming file object:', req.file); // <--- ADD HERE
+    console.log('📂 Incoming file object:', req.file);
 
     if (!req.file) {
       console.error('❌ No file uploaded in request');
       return res.status(400).json({ error: 'No file uploaded' });
     }
 
-    console.log('📂 req.file.path:', req.file.path); // <--- ADD HERE
-
-    const buffer = fs.readFileSync(req.file.path);
-
+    const buffer = req.file.buffer; // ✅ Directly from multer memoryStorage
 
     // Detect file type
     const type = await fileTypeFromBuffer(buffer);
@@ -67,17 +64,15 @@ export const uploadFont = async (req, res) => {
 
     // Upload to S3
     const s3Key = `${Date.now()}-${req.file.originalname}`;
-    await s3
-      .upload({
-        Bucket: process.env.S3_BUCKET_NAME,
-        Key: s3Key,
-        Body: buffer,
-        ContentType: type.mime,
-      })
-      .promise();
+    await s3.upload({
+      Bucket: process.env.S3_BUCKET_NAME,
+      Key: s3Key,
+      Body: buffer,
+      ContentType: type.mime,
+    }).promise();
 
-    // Extract font metadata
-    const font = Fontkit.openSync(req.file.path);
+    // Extract font metadata from buffer
+    const font = Fontkit.openSync(buffer);
     const metadata = {
       family: font.familyName,
       fullName: font.fullName,
@@ -95,14 +90,13 @@ export const uploadFont = async (req, res) => {
       user: req.user.id,
     });
 
-    fs.unlinkSync(req.file.path);
-
     res.json(newFont);
   } catch (err) {
     console.error('❌ Error uploading font:', err);
     res.status(500).json({ error: 'Error uploading font' });
   }
 };
+
 
 // Get fonts for logged-in user
 export const getUserFonts = async (req, res) => {

@@ -1,7 +1,6 @@
 // controllers/fontController.js
 
-import fileType from 'file-type';
-const { fileTypeFromBuffer } = fileType; // ✅ works for CommonJS default export
+import { fileTypeFromBuffer } from 'file-type'; // ✅ ESM named import
 import fs from 'fs';
 import AWS from 'aws-sdk';
 import * as Fontkit from 'fontkit';

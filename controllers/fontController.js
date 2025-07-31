@@ -1,13 +1,16 @@
+// controllers/fontController.js
 import AWS from "aws-sdk";
-import fontkit from "fontkit";
-import pkg from "file-type"; // ✅ Correct import for ESM
+import * as fontkit from "fontkit";
+
+// ⬇️ MINIMAL CHANGE — correct import for fileTypeFromBuffer
+import pkg from "file-type";
 const { fileTypeFromBuffer } = pkg;
 
 import ttf2woff2 from "ttf2woff2";
 import otf2ttf from "otf2ttf";
 import Font from "../models/fontModel.js";
 
-// ✅ Configure AWS S3
+// Configure AWS S3
 const s3 = new AWS.S3({
   accessKeyId: process.env.AWS_ACCESS_KEY_ID,
   secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
@@ -15,7 +18,7 @@ const s3 = new AWS.S3({
 });
 
 /**
- * 📤 Upload a font (TTF/OTF/WOFF/WOFF2)
+ * 📤 Upload and process font
  */
 export const uploadFont = async (req, res) => {
   try {
@@ -23,20 +26,17 @@ export const uploadFont = async (req, res) => {
       return res.status(400).json({ message: "No font file uploaded" });
     }
 
-    // 1️⃣ Detect file type
     const type = await fileTypeFromBuffer(req.file.buffer);
-    let originalExt = type?.ext || "ttf";
     let originalBuffer = req.file.buffer;
     let woff2Buffer = null;
 
-    // 2️⃣ Generate unique file names
+    // Generate unique names
     const baseName = req.file.originalname.replace(/\.[^/.]+$/, "");
     const timestamp = Date.now();
 
+    // Upload original file
+    const originalExt = type?.ext || "ttf";
     const originalKey = `${timestamp}-${baseName}.${originalExt}`;
-    const woff2Key = `${timestamp}-${baseName}.woff2`;
-
-    // 3️⃣ Upload original file to S3
     await s3
       .putObject({
         Bucket: process.env.S3_BUCKET_NAME,
@@ -46,34 +46,29 @@ export const uploadFont = async (req, res) => {
       })
       .promise();
 
-    // 4️⃣ Convert to WOFF2 if needed
+    // Convert to WOFF2 if needed
     if (["ttf", "otf"].includes(originalExt)) {
       let ttfBuffer = originalBuffer;
       if (originalExt === "otf") {
         ttfBuffer = Buffer.from(otf2ttf(originalBuffer));
       }
       woff2Buffer = Buffer.from(ttf2woff2(ttfBuffer));
-    } else if (originalExt === "woff") {
-      // Convert WOFF → WOFF2
-      const ttfBuffer = Buffer.from(originalBuffer); // sometimes works directly
-      woff2Buffer = Buffer.from(ttf2woff2(ttfBuffer));
-    } else if (originalExt === "woff2") {
-      woff2Buffer = originalBuffer; // Already WOFF2
+    } else if (["woff", "woff2"].includes(originalExt)) {
+      woff2Buffer = originalBuffer; // No conversion needed
     }
 
-    // 5️⃣ Upload WOFF2 version
-    if (woff2Buffer) {
-      await s3
-        .putObject({
-          Bucket: process.env.S3_BUCKET_NAME,
-          Key: woff2Key,
-          Body: woff2Buffer,
-          ContentType: "font/woff2",
-        })
-        .promise();
-    }
+    // Upload WOFF2 version
+    const woff2Key = `${timestamp}-${baseName}.woff2`;
+    await s3
+      .putObject({
+        Bucket: process.env.S3_BUCKET_NAME,
+        Key: woff2Key,
+        Body: woff2Buffer,
+        ContentType: "font/woff2",
+      })
+      .promise();
 
-    // 6️⃣ Create signed URLs (valid for 7 days)
+    // Create signed download URLs (valid for 7 days)
     const originalUrl = s3.getSignedUrl("getObject", {
       Bucket: process.env.S3_BUCKET_NAME,
       Key: originalKey,
@@ -86,23 +81,22 @@ export const uploadFont = async (req, res) => {
       Expires: 7 * 24 * 60 * 60,
     });
 
-    // 7️⃣ Extract metadata
-    const fontData = fontkit.create(woff2Buffer || originalBuffer);
+    // Extract metadata
+    const font = fontkit.create(woff2Buffer);
 
-    // 8️⃣ Save in MongoDB
+    // Save in MongoDB
     const newFont = await Font.create({
       name: req.file.originalname,
       originalFile: originalKey,
       woff2File: woff2Key,
       user: req.user.id,
-      family: fontData.familyName || "",
-      fullName: fontData.fullName || "",
-      style: fontData.subfamilyName || "",
+      family: font.familyName || "",
+      fullName: font.fullName || "",
+      style: font.subfamilyName || "",
       originalDownloadUrl: originalUrl,
       woff2DownloadUrl: woff2Url,
     });
 
-    console.log(`✅ Uploaded ${originalExt} + WOFF2 to S3 for ${baseName}`);
     res.json(newFont);
   } catch (error) {
     console.error("❌ Font upload failed:", error);

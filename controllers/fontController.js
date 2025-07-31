@@ -1,105 +1,96 @@
 // controllers/fontController.js
 import { createRequire } from "module";
-const require = createRequire(import.meta.url);
-
-// ✅ Works with file-type@16.5.4 CommonJS build on Render
-const fileTypeFromBuffer = require("file-type");
-
-import fs from "fs";
-import path from "path";
 import AWS from "aws-sdk";
-import multer from "multer";
 import Font from "../models/fontModel.js";
-import mongoose from "mongoose";
+import dotenv from "dotenv";
+import fontkit from "fontkit";
+import axios from "axios";
 
-// Setup AWS S3
+dotenv.config();
+const require = createRequire(import.meta.url);
+const fileType = require("file-type"); // CommonJS require
+const { fileTypeFromBuffer } = fileType;
+
+// AWS S3 setup
 const s3 = new AWS.S3({
   accessKeyId: process.env.AWS_ACCESS_KEY_ID,
   secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
   region: process.env.AWS_REGION,
 });
 
-// Multer storage (store locally before upload to S3)
-const upload = multer({ dest: "uploads/" });
-
-// Upload font to S3
+// Upload font
 export const uploadFont = async (req, res) => {
   try {
-    if (!req.file) {
-      return res.status(400).json({ error: "No file uploaded" });
+    const file = req.file; // multer-s3 file
+    if (!file) {
+      return res.status(400).json({ message: "No file uploaded" });
     }
 
-    const filePath = req.file.path;
-    const buffer = fs.readFileSync(filePath);
-
-    // ✅ Works on Render now
-    const type = await fileTypeFromBuffer(buffer);
-    if (!type || !["ttf", "otf", "woff", "woff2"].includes(type.ext)) {
-      fs.unlinkSync(filePath); // cleanup
-      return res.status(400).json({ error: "Invalid font file type" });
+    // Detect file type
+    const type = await fileTypeFromBuffer(file.buffer);
+    if (!type || !["ttf", "otf", "woff", "woff2", "eot"].includes(type.ext)) {
+      return res.status(400).json({ message: "Invalid font format" });
     }
 
-    // Upload to S3
-    const s3Key = `${Date.now()}-${req.file.originalname}`;
-    await s3
-      .upload({
-        Bucket: process.env.S3_BUCKET_NAME,
-        Key: s3Key,
-        Body: buffer,
-        ContentType: type.mime,
-      })
-      .promise();
+    // Read font metadata from buffer
+    const font = fontkit.create(file.buffer);
+    const fontName = font.fullName || file.originalname;
 
-    // Save in DB
-    const font = await Font.create({
-      name: req.file.originalname,
-      originalFile: s3Key,
+    // Save metadata to MongoDB
+    const newFont = await Font.create({
+      name: fontName,
+      family: font.familyName,
+      fullName: font.fullName,
+      postscriptName: font.postscriptName,
+      style: font.subfamilyName,
+      weight: font.weight || null,
+      originalFile: file.location, // S3 URL
       user: req.user.id,
     });
 
-    // Cleanup temp file
-    fs.unlinkSync(filePath);
-
-    res.json({ message: "Font uploaded successfully", font });
+    res.status(201).json({
+      message: "Font uploaded successfully",
+      font: newFont,
+    });
   } catch (err) {
     console.error("❌ Error uploading font:", err);
-    res.status(500).json({ error: "Error uploading font" });
+    res.status(500).json({ message: err.message });
   }
 };
 
-// Get all fonts for logged-in user
+// Get all fonts (per user)
 export const getAllFonts = async (req, res) => {
   try {
     const fonts = await Font.find({ user: req.user.id }).sort({ createdAt: -1 });
     res.json(fonts);
   } catch (err) {
-    res.status(500).json({ error: "Error fetching fonts" });
+    res.status(500).json({ message: err.message });
   }
 };
 
 // Delete font
 export const deleteFont = async (req, res) => {
   try {
-    const font = await Font.findOne({ _id: req.params.id, user: req.user.id });
+    const font = await Font.findById(req.params.id);
     if (!font) {
-      return res.status(404).json({ error: "Font not found" });
+      return res.status(404).json({ message: "Font not found" });
     }
 
     // Delete from S3
+    const key = font.originalFile.split("/").pop();
     await s3
       .deleteObject({
         Bucket: process.env.S3_BUCKET_NAME,
-        Key: font.originalFile,
+        Key: key,
       })
       .promise();
 
-    await Font.deleteOne({ _id: req.params.id });
+    // Delete from MongoDB
+    await font.deleteOne();
 
     res.json({ message: "Font deleted successfully" });
   } catch (err) {
-    res.status(500).json({ error: "Error deleting font" });
+    console.error("❌ Error deleting font:", err);
+    res.status(500).json({ message: err.message });
   }
 };
-
-// Multer middleware for routes
-export const multerUpload = upload.single("font");

@@ -12,12 +12,14 @@ dotenv.config();
 const app = express();
 
 // Middleware
-app.use(
-  cors({
-    origin: process.env.FRONTEND_URL || "*", // Allow frontend to connect
-    credentials: true,
-  })
-);
+app.use(cors({
+  origin: [
+    "https://fontflow-backend-vhnr.vercel.app", // your frontend on Vercel
+    "http://localhost:3000" // local dev
+  ],
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"]
+}));
 app.use(express.json());
 app.use(morgan("dev"));
 

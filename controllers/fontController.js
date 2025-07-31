@@ -4,7 +4,6 @@ import AWS from "aws-sdk";
 import Font from "../models/fontModel.js";
 import dotenv from "dotenv";
 import fontkit from "fontkit";
-import axios from "axios";
 
 dotenv.config();
 const require = createRequire(import.meta.url);

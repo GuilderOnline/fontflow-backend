@@ -1,11 +1,12 @@
 // controllers/fontController.js
 
 import AWS from "aws-sdk";
-import * as fontkit from "fontkit";
-import { fileTypeFromBuffer } from "file-type"; // ✅ MINIMUM FIX: direct named import for Render/Node18
+import * as fontkit from "fontkit"; // ✅ FIXED for ESM
+import pkg from "file-type";        // ✅ CommonJS import works on Render
+const { fileTypeFromBuffer } = pkg; // ✅ Extract function
 import ttf2woff2 from "ttf2woff2";
 import otf2ttf from "otf2ttf";
-import Font from "../models/fontModel.js"; 
+import Font from "../models/fontModel.js";
 
 // Configure AWS S3
 const s3 = new AWS.S3({
@@ -15,7 +16,7 @@ const s3 = new AWS.S3({
 });
 
 /**
- * 📤 Upload and process font
+ * 📤 Upload a font
  */
 export const uploadFont = async (req, res) => {
   try {
@@ -106,15 +107,17 @@ export const uploadFont = async (req, res) => {
  */
 export const getAllFonts = async (req, res) => {
   try {
+    // Admins see all fonts, normal users only their own
     const query = req.user.role === "admin" ? {} : { user: req.user.id };
     const fonts = await Font.find(query).sort({ createdAt: -1 });
 
-    const fontsWithUrls = fonts.map((font) => {
+    // Attach fresh signed URLs
+    const fontsWithUrls = fonts.map(font => {
       const originalUrl = font.originalFile
         ? s3.getSignedUrl("getObject", {
             Bucket: process.env.S3_BUCKET_NAME,
             Key: font.originalFile,
-            Expires: 60 * 5, // 5 minutes
+            Expires: 60 * 5 // 5 min expiry
           })
         : null;
 
@@ -122,14 +125,14 @@ export const getAllFonts = async (req, res) => {
         ? s3.getSignedUrl("getObject", {
             Bucket: process.env.S3_BUCKET_NAME,
             Key: font.woff2File,
-            Expires: 60 * 5,
+            Expires: 60 * 5
           })
         : null;
 
       return {
         ...font.toObject(),
         originalDownloadUrl: originalUrl,
-        woff2DownloadUrl: woff2Url,
+        woff2DownloadUrl: woff2Url
       };
     });
 

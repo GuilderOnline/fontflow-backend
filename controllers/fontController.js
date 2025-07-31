@@ -1,30 +1,13 @@
 // controllers/fontController.js
 
 import fileType from 'file-type';
-const { fileTypeFromBuffer } = fileType; // ✅ works for CommonJS default export
-import fs from 'fs';
+const { fileTypeFromBuffer } = fileType; // ✅ Correct for CommonJS package
 import AWS from 'aws-sdk';
 import * as Fontkit from 'fontkit';
-import path from 'path';
 import Font from '../models/font.js';
-import fileTypePkg from 'file-type';
 
-// Handle both modern (v16+) and legacy (v3–v15) versions
-const detectFileType = async (buffer) => {
-  if (typeof fileTypePkg.fileTypeFromBuffer === 'function') {
-    // v16+
-    return await fileTypePkg.fileTypeFromBuffer(buffer);
-  }
-  if (typeof fileTypePkg === 'function') {
-    // v3–v7 style
-    return await fileTypePkg(buffer);
-  }
-  if (typeof fileTypePkg.default?.fileTypeFromBuffer === 'function') {
-    // Sometimes default export holds the function
-    return await fileTypePkg.default.fileTypeFromBuffer(buffer);
-  }
-  throw new Error('No compatible file-type detection function found');
-};
+
+
 
 // AWS S3 configuration
 const s3 = new AWS.S3({
@@ -63,28 +46,52 @@ export const getAllFonts = async (req, res) => {
 };
 
 // Upload font file to S3
+// 📌 Upload font file to S3
 export const uploadFont = async (req, res) => {
   try {
-    if (!req.file) {
+    if (!req.file || !req.file.buffer) {
       return res.status(400).json({ error: 'No file uploaded' });
     }
 
-    console.log('📂 Incoming file object:', req.file);
+    // 1️⃣ Detect file type directly from buffer
+    const type = await fileTypeFromBuffer(req.file.buffer);
 
-    // 🔹 Use buffer directly from multer (no file path on memory storage)
-    const buffer = req.file.buffer;
-
-    // Detect file type safely
-    const type = await detectFileType(buffer);
-    console.log('📄 Detected file type:', type);
-
+    // 2️⃣ Validate allowed types
     if (!type || !['font/ttf', 'font/otf', 'application/font-sfnt'].includes(type.mime)) {
       return res.status(400).json({ error: 'Invalid font file type' });
     }
 
-    // Continue with S3 upload...
-    // (rest of your existing code unchanged)
-    
+    // 3️⃣ Generate S3 key
+    const s3Key = `${Date.now()}-${req.file.originalname}`;
+
+    // 4️⃣ Upload buffer directly to S3
+    await s3.upload({
+      Bucket: process.env.S3_BUCKET_NAME,
+      Key: s3Key,
+      Body: req.file.buffer,
+      ContentType: type.mime,
+    }).promise();
+
+    // 5️⃣ Extract font metadata directly from buffer
+    const font = Fontkit.create(req.file.buffer);
+    const metadata = {
+      family: font.familyName || '',
+      fullName: font.fullName || '',
+      style: font.subfamilyName || '',
+      weight: font['OS/2']?.usWeightClass || '',
+      description: font.name?.description || '',
+      manufacturer: font.manufacturer || '',
+      license: font.license || '',
+    };
+
+    // 6️⃣ Save to DB
+    const newFont = await Font.create({
+      ...metadata,
+      originalFile: s3Key,
+      user: req.user.id,
+    });
+
+    res.json(newFont);
   } catch (err) {
     console.error('❌ Error uploading font:', err);
     res.status(500).json({ error: 'Error uploading font' });

@@ -14,14 +14,15 @@ const allowedOrigins = process.env.ALLOWED_ORIGINS
   : ["http://localhost:3000"];
 
 // 🔹 CORS middleware
+// 🔹 CORS middleware (SAFE VERSION)
 app.use(
   cors({
     origin: function (origin, callback) {
-      // Allow no origin (like Postman or curl)
-      if (!origin) return callback(null, true);
+      if (!origin) return callback(null, true); // allow Postman / curl
       if (allowedOrigins.includes(origin)) {
         return callback(null, true);
       }
+      console.warn(`❌ CORS blocked request from: ${origin}`);
       return callback(new Error("Not allowed by CORS"));
     },
     credentials: true,

@@ -8,27 +8,36 @@ import connectDB from "./config/db.js";
 dotenv.config();
 const app = express();
 
-// ✅ Simple CORS - allows frontend & local dev
+// 🔹 Allowed origins from environment (comma-separated)
+const allowedOrigins = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(",")
+  : ["http://localhost:3000"];
+
+// 🔹 CORS middleware
 app.use(
   cors({
-    origin: [
-      "https://fontflow-backend-vhnr.vercel.app", // your Vercel frontend
-      "http://localhost:3000" // local development
-    ],
+    origin: function (origin, callback) {
+      // Allow no origin (like Postman or curl)
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+      return callback(new Error("Not allowed by CORS"));
+    },
     credentials: true,
   })
 );
 
-// ✅ Parse JSON requests
+// 🔹 Parse JSON requests
 app.use(express.json());
 
-// ✅ Logger
+// 🔹 Logger
 app.use(morgan("dev"));
 
-// ✅ Connect to DB
+// 🔹 Connect to DB
 connectDB();
 
-// ✅ Routes
+// 🔹 Routes
 import authRoutes from "./routes/authRoutes.js";
 import fontRoutes from "./routes/fontRoutes.js";
 import projectRoutes from "./routes/projectsRoutes.js";
@@ -37,13 +46,14 @@ app.use("/api/auth", authRoutes);
 app.use("/api/fonts", fontRoutes);
 app.use("/api/projects", projectRoutes);
 
-// ✅ Health check
+// 🔹 Health check
 app.get("/", (req, res) => {
   res.send("FontFlow Backend is running 🚀");
 });
 
-// ✅ Start server
+// 🔹 Start server
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
+  console.log(`🌍 Allowed origins: ${allowedOrigins.join(", ")}`);
 });

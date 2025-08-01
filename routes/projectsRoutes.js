@@ -160,46 +160,60 @@ router.get('/:id/generate-code', jwtAuth, async (req, res) => {
 // Function to generate embed and CSS code based on fonts
 // Function to generate embed and CSS code based on fonts
 // Function to generate embed and CSS code based on fonts
+// Function to generate embed and CSS code based on fonts
 function generateCode(fonts) {
-  if (!fonts || fonts.length === 0) {
-    console.log("No fonts associated with this project.");
-    return { embedCode: '', cssCode: '' }; // Return empty strings if no fonts are available
-  }
-
   const preconnectLink = `<link rel="preconnect" href="https://s3.amazonaws.com">`;
 
-  // Generate font URLs and ensure `weights` is defined
+  // Generate font URLs for the embed code
   const fontUrls = fonts
     .map(font => {
-      // If no weights are defined, default to 400
-      const weights = Array.isArray(font.weights) && font.weights.length > 0 ? font.weights : [400];
-      return `${font.family.replace(/ /g, "+")}:wght@${weights.join('..')}`;
+      // Ensure `font.weights` is an array and contains values
+      if (Array.isArray(font.weights) && font.weights.length > 0) {
+        return `${encodeURIComponent(font.family)}:wght@${font.weights.join('..')}`;
+      } else {
+        console.warn(`Font '${font.family}' has no weights defined.`);
+        return `${encodeURIComponent(font.family)}:wght@400`; // Default to weight 400 if no weights are defined
+      }
     })
-    .join("&family=");
+    .join("&family="); 
 
+  // Embed Code pointing to your S3 bucket
   const linkTag = `${preconnectLink}
-<link href="https://fonts.gstatic.com/css2?family=${fontUrls}&display=swap" rel="stylesheet">`;
+<link href="https://s3.amazonaws.com/${process.env.S3_BUCKET_NAME}/fonts/${fontUrls}" rel="stylesheet">`;
 
-  // Generate CSS code for fonts, default to weight 400 if weights are not defined
+  // Generate CSS code for fonts
   const cssText = fonts
     .map(font => {
-      const weights = Array.isArray(font.weights) && font.weights.length > 0 ? font.weights : [400];
-      return weights
-        .map(weight => {
-          const uniquifier = `${font.family.replace(/ /g, "-").toLowerCase()}-${weight}`;
-          return `
+      if (Array.isArray(font.weights) && font.weights.length > 0) {
+        return font.weights
+          .map(weight => {
+            const uniquifier = `${font.family.replace(/ /g, "-").toLowerCase()}-${weight}`;
+            // Correct S3 URL for font file
+            const fontUrl = `https://s3.amazonaws.com/${process.env.S3_BUCKET_NAME}/fonts/${font.file}`;
+            return `
 .${font.family.replace(/ /g, "-").toLowerCase()}-${uniquifier} {
   font-family: "${font.family}", sans-serif;
   font-weight: ${weight};
-  src: url("https://s3.amazonaws.com/${process.env.S3_BUCKET_NAME}/${font.file}") format("woff2");
+  src: url("${fontUrl}") format("woff2");
 }`;
-        })
-        .join("\n");
+          })
+          .join("\n");
+      } else {
+        console.warn(`Font '${font.family}' has no weights defined.`);
+        const fontUrl = `https://s3.amazonaws.com/${process.env.S3_BUCKET_NAME}/fonts/${font.file}`;
+        return `
+.${font.family.replace(/ /g, "-").toLowerCase()}-400 {
+  font-family: "${font.family}", sans-serif;
+  font-weight: 400;
+  src: url("${fontUrl}") format("woff2");
+}`;
+      }
     })
     .join("\n");
 
   return { embedCode: linkTag, cssCode: cssText };
 }
+
 
 
 

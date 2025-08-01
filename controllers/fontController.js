@@ -4,23 +4,10 @@ import * as fontkit from "fontkit"; // ✅ FIXED for ESM
 import fileType from "file-type";   // ✅ Import entire package (works on Render's Node + file-type v16)
 import Font from "../models/fontModel.js";
 import { ensureWoff2 } from '../utils/fontConversion.js';
-
-
-
-// Configure AWS S3
-const s3 = new AWS.S3({
-  accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-  secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-  region: process.env.AWS_REGION,
-});
-
-/**
- * 📤 Upload a font
- */
-import AWS from "aws-sdk";
 import path from "path";
-import Font from "../models/fontModel.js";
-import { ensureWoff2 } from "../utils/fontConversion.js"; // updated safe version
+
+
+
 
 // Configure AWS S3
 const s3 = new AWS.S3({
@@ -28,6 +15,8 @@ const s3 = new AWS.S3({
   secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
   region: process.env.AWS_REGION,
 });
+
+
 
 /**
  * 📤 Upload a font

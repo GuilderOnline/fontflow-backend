@@ -178,7 +178,7 @@ function generateCode(fonts) {
         return `${font.family.replace(/ /g, "+")}:wght@400`; // Default to weight 400 if no weights are defined
       }
     })
-    .join("&family=");
+    .join("&family="); 
 
   const linkTag = `${preconnectLink}
 <link href="https://fonts.gstatic.com/css2?family=${fontUrls}&display=swap" rel="stylesheet">`;

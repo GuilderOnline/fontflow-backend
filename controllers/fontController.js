@@ -38,36 +38,7 @@ function extractFontMetadata(buffer) {
 /**
  * 📤 Upload a font
  */
-// controllers/fontController.js
-import AWS from "aws-sdk";
-import * as fontkit from "fontkit";
-import Font from "../models/fontModel.js";
-import { ensureWoff2 } from "../utils/fontConversion.js";
 
-// Configure AWS S3
-const s3 = new AWS.S3({
-  accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-  secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-  region: process.env.AWS_REGION
-});
-
-function extractFontMetadata(buffer) {
-  try {
-    const font = fontkit.create(buffer);
-    return {
-      family: font.familyName || "",
-      fullName: font.fullName || "",
-      postscriptName: font.postscriptName || "",
-      style: font.subfamilyName || "",
-      weight: font['OS/2']?.usWeightClass || "",
-      manufacturer: font.manufacturer || "",
-      license: font.license || ""
-    };
-  } catch (err) {
-    console.error("❌ Metadata extraction failed:", err);
-    return {};
-  }
-}
 
 export const uploadFont = async (req, res) => {
   try {

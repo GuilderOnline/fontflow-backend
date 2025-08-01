@@ -161,13 +161,12 @@ router.get('/:id/generate-code', jwtAuth, async (req, res) => {
 // Function to generate embed and CSS code based on fonts
 // Function to generate embed and CSS code based on fonts
 // Function to generate embed and CSS code based on fonts
+// Function to generate embed and CSS code based on fonts
 function generateCode(fonts) {
   const preconnectLink = `<link rel="preconnect" href="https://s3.amazonaws.com">`;
 
-  // Generate font URLs for the embed code
   const fontUrls = fonts
     .map(font => {
-      // Ensure `font.weights` is an array and contains values
       if (Array.isArray(font.weights) && font.weights.length > 0) {
         return `${encodeURIComponent(font.family)}:wght@${font.weights.join('..')}`;
       } else {
@@ -177,11 +176,11 @@ function generateCode(fonts) {
     })
     .join("&family="); 
 
-  // Embed Code pointing to your S3 bucket
+  // Embed Code pointing to your S3 bucket in EU (North) region
   const linkTag = `${preconnectLink}
-<link href="https://s3.amazonaws.com/${process.env.S3_BUCKET_NAME}/fonts/${fontUrls}" rel="stylesheet">`;
+<link href="https://fontflowbucket.s3.eu-north-1.amazonaws.com/fonts/${fontUrls}" rel="stylesheet">`;
 
-  // Generate CSS code for fonts
+  // Generate CSS code for fonts (uses S3 URL for font files)
   const cssText = fonts
     .map(font => {
       if (Array.isArray(font.weights) && font.weights.length > 0) {
@@ -189,7 +188,7 @@ function generateCode(fonts) {
           .map(weight => {
             const uniquifier = `${font.family.replace(/ /g, "-").toLowerCase()}-${weight}`;
             // Correct S3 URL for font file
-            const fontUrl = `https://s3.amazonaws.com/${process.env.S3_BUCKET_NAME}/fonts/${font.file}`;
+            const fontUrl = `https://fontflowbucket.s3.eu-north-1.amazonaws.com/fonts/${font.file}`;
             return `
 .${font.family.replace(/ /g, "-").toLowerCase()}-${uniquifier} {
   font-family: "${font.family}", sans-serif;
@@ -200,7 +199,7 @@ function generateCode(fonts) {
           .join("\n");
       } else {
         console.warn(`Font '${font.family}' has no weights defined.`);
-        const fontUrl = `https://s3.amazonaws.com/${process.env.S3_BUCKET_NAME}/fonts/${font.file}`;
+        const fontUrl = `https://fontflowbucket.s3.eu-north-1.amazonaws.com/fonts/${font.file}`;
         return `
 .${font.family.replace(/ /g, "-").toLowerCase()}-400 {
   font-family: "${font.family}", sans-serif;
@@ -213,6 +212,7 @@ function generateCode(fonts) {
 
   return { embedCode: linkTag, cssCode: cssText };
 }
+
 
 
 

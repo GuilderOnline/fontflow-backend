@@ -59,7 +59,7 @@ export const uploadFont = async (req, res) => {
         Key: originalKey,
         Body: req.file.buffer,
         ContentType: type.mime,
-        ACL: "public-read",
+        // ACL: "public-read",
       })
       .promise();
 

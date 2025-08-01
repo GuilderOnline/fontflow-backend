@@ -16,6 +16,23 @@ const s3 = new AWS.S3({
   region: process.env.AWS_REGION,
 });
 
+function extractFontMetadata(buffer) {
+  try {
+    const font = fontkit.create(buffer);
+    return {
+      family: font.familyName || "",
+      fullName: font.fullName || "",
+      postscriptName: font.postscriptName || "",
+      style: font.subfamilyName || "",
+      weight: font["OS/2"]?.usWeightClass || "",
+      manufacturer: font.manufacturer || "",
+      license: font.license || "",
+    };
+  } catch (err) {
+    console.warn("⚠️ Could not extract font metadata:", err);
+    return {};
+  }
+}
 
 
 /**

@@ -75,7 +75,7 @@ export const uploadFont = async (req, res) => {
           Key: woff2Key,
           Body: woff2Buffer,
           ContentType: "font/woff2",
-          ACL: "public-read",
+          // ACL: "public-read",
         })
         .promise();
     }

@@ -1,13 +1,35 @@
-// backend/utils/fontConversion.js
+// src/utils/fontConversion.js
 import ttf2woff2 from "ttf2woff2";
 import otf2ttf from "otf2ttf";
+import { Readable } from "stream";
 
 /**
- * Convert OTF to TTF (Buffer)
+ * Helper: Convert a Node stream into a Buffer
  */
-export function convertOtfToTtf(buffer) {
+function streamToBuffer(stream) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    stream.on("data", (chunk) => chunks.push(chunk));
+    stream.on("end", () => resolve(Buffer.concat(chunks)));
+    stream.on("error", reject);
+  });
+}
+
+/**
+ * Convert OTF → TTF (returns Buffer)
+ */
+export async function convertOtfToTtf(buffer) {
   try {
-    return Buffer.from(otf2ttf(buffer));
+    if (!Buffer.isBuffer(buffer)) {
+      buffer = Buffer.from(buffer);
+    }
+
+    // otf2ttf is stream-based, so we need to pipe it
+    const inputStream = Readable.from(buffer);
+    const transform = otf2ttf();
+
+    const ttfBuffer = await streamToBuffer(inputStream.pipe(transform));
+    return ttfBuffer;
   } catch (err) {
     console.error("❌ OTF → TTF conversion failed:", err);
     return null;
@@ -15,10 +37,13 @@ export function convertOtfToTtf(buffer) {
 }
 
 /**
- * Convert TTF to WOFF2 (Buffer)
+ * Convert TTF → WOFF2 (returns Buffer)
  */
 export function convertTtfToWoff2(buffer) {
   try {
+    if (!Buffer.isBuffer(buffer)) {
+      buffer = Buffer.from(buffer);
+    }
     return Buffer.from(ttf2woff2(buffer));
   } catch (err) {
     console.error("❌ TTF → WOFF2 conversion failed:", err);
@@ -27,22 +52,22 @@ export function convertTtfToWoff2(buffer) {
 }
 
 /**
- * Ensure we have WOFF2 from any source font
+ * Ensure WOFF2 from any source font (returns Buffer)
  */
-export function ensureWoff2(buffer, ext) {
+export async function ensureWoff2(buffer, ext) {
   let woff2Buffer = null;
 
   if (ext === "otf") {
-    const ttfBuffer = convertOtfToTtf(buffer);
+    const ttfBuffer = await convertOtfToTtf(buffer);
     if (ttfBuffer) {
       woff2Buffer = convertTtfToWoff2(ttfBuffer);
     }
   } else if (ext === "ttf") {
     woff2Buffer = convertTtfToWoff2(buffer);
   } else if (ext === "woff2") {
-    woff2Buffer = buffer; // Already WOFF2
+    woff2Buffer = buffer; // already WOFF2
   } else if (ext === "woff") {
-    // Can't convert WOFF to WOFF2 directly — keep as is
+    // Can't directly convert WOFF → WOFF2, keep original
     woff2Buffer = buffer;
   }
 

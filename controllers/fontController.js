@@ -45,7 +45,7 @@ export const uploadFont = async (req, res) => {
     }
 
     // Detect file type
-    const type = await fileTypeFromBuffer(req.file.buffer);
+    const type = await fileType.fromBuffer(req.file.buffer);
     if (!type) return res.status(400).json({ message: "Unsupported file type" });
 
     const ext = type.ext.toLowerCase();

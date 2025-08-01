@@ -113,18 +113,36 @@ export const getAllFonts = async (req, res) => {
     const fontsWithUrls = fonts.map((font) => {
       const fontObj = font.toObject();
 
-      if (font.originalFile) {
+      // Helper to extract only the S3 key (strip bucket URL if stored as full URL)
+      const getKey = (filePath) => {
+        if (!filePath) return null;
+
+        let key = filePath;
+        if (key.startsWith("http")) {
+          // Remove bucket domain part and decode
+          const parts = key.split(".amazonaws.com/");
+          if (parts.length > 1) {
+            key = decodeURIComponent(parts[1]);
+          }
+        }
+        return key;
+      };
+
+      // Generate signed URLs safely
+      const originalKey = getKey(font.originalFile);
+      if (originalKey) {
         fontObj.originalDownloadUrl = s3.getSignedUrl("getObject", {
           Bucket: process.env.S3_BUCKET_NAME,
-          Key: font.originalFile,
+          Key: originalKey,
           Expires: 60 * 60, // 1 hour
         });
       }
 
-      if (font.woff2File) {
+      const woff2Key = getKey(font.woff2File);
+      if (woff2Key) {
         fontObj.woff2DownloadUrl = s3.getSignedUrl("getObject", {
           Bucket: process.env.S3_BUCKET_NAME,
-          Key: font.woff2File,
+          Key: woff2Key,
           Expires: 60 * 60, // 1 hour
         });
       }
@@ -138,6 +156,7 @@ export const getAllFonts = async (req, res) => {
     res.status(500).json({ message: "Failed to fetch fonts" });
   }
 };
+
 
 /**
  * 🗑 Delete a font

@@ -44,56 +44,78 @@ export const uploadFont = async (req, res) => {
       return res.status(400).json({ message: "No font file uploaded" });
     }
 
-    const originalFileName = req.file.originalname;
-    const ext = path.extname(originalFileName).replace(".", "").toLowerCase();
-    const baseName = path.basename(originalFileName, path.extname(originalFileName));
+    // Detect file type
+    const type = await fileTypeFromBuffer(req.file.buffer);
+    if (!type) return res.status(400).json({ message: "Unsupported file type" });
 
-    console.log(`📦 Uploading font: ${originalFileName} (${ext})`);
-
-    // Extract metadata before uploading
-    const metadata = extractFontMetadata(req.file.buffer);
-
-    // Upload original
-    const originalKey = `fonts/${Date.now()}-${originalFileName}`;
-    await s3.upload({
-      Bucket: process.env.S3_BUCKET_NAME,
-      Key: originalKey,
-      Body: req.file.buffer,
-    }).promise();
-
-    // Convert TTF to WOFF2 if possible
-    let woff2Key = null;
-    const woff2Buffer = await ensureWoff2(req.file.buffer, ext);
-    if (woff2Buffer) {
-      woff2Key = `fonts/${Date.now()}-${baseName}.woff2`;
-      await s3.upload({
+    const ext = type.ext.toLowerCase();
+    const fileNameBase = `${Date.now()}-${req.file.originalname.replace(/\s+/g, "_")}`;
+    const originalKey = `fonts/${fileNameBase}`;
+    
+    // Upload original font to S3 with public-read
+    await s3
+      .upload({
         Bucket: process.env.S3_BUCKET_NAME,
-        Key: woff2Key,
-        Body: woff2Buffer,
-      }).promise();
+        Key: originalKey,
+        Body: req.file.buffer,
+        ContentType: type.mime,
+        ACL: "public-read",
+      })
+      .promise();
+
+    // Convert to WOFF2
+    const woff2Buffer = await ensureWoff2(req.file.buffer, ext);
+    let woff2Key = null;
+
+    if (woff2Buffer) {
+      woff2Key = `fonts/${fileNameBase.replace(/\.[^/.]+$/, "")}.woff2`;
+      await s3
+        .upload({
+          Bucket: process.env.S3_BUCKET_NAME,
+          Key: woff2Key,
+          Body: woff2Buffer,
+          ContentType: "font/woff2",
+          ACL: "public-read",
+        })
+        .promise();
     }
 
-    // Save in MongoDB (store keys, not signed URLs)
-    const fontDoc = await Font.create({
-      name: baseName,
-      originalFile: originalKey,
-      woff2File: woff2Key,
-      family: metadata.family,
-      fullName: metadata.fullName,
-      postscriptName: metadata.postscriptName,
-      style: metadata.style,
-      weight: metadata.weight,
-      manufacturer: metadata.manufacturer,
-      license: metadata.license,
+    // Public URLs (never expire)
+    const bucket = process.env.S3_BUCKET_NAME;
+    const region = process.env.AWS_REGION;
+
+    const originalUrl = `https://${bucket}.s3.${region}.amazonaws.com/${originalKey}`;
+    const woff2Url = woff2Key
+      ? `https://${bucket}.s3.${region}.amazonaws.com/${woff2Key}`
+      : null;
+
+    // Extract font metadata
+    const fontMetadata = await extractFontMetadata(req.file.buffer);
+
+    // Save to MongoDB
+    const fontDoc = new Font({
+      name: fontMetadata.fullName,
+      family: fontMetadata.family,
+      style: fontMetadata.style,
+      weight: fontMetadata.weight,
+      description: fontMetadata.description || "",
+      license: fontMetadata.license || "",
+      manufacturer: fontMetadata.manufacturer || "",
+      originalFile: originalUrl,
+      woff2File: woff2Url,
       user: req.user.id,
     });
 
-    res.status(201).json(fontDoc);
+    await fontDoc.save();
+
+    res.status(201).json({ message: "Font uploaded successfully", font: fontDoc });
+
   } catch (err) {
     console.error("❌ Font upload error:", err);
-    res.status(500).json({ message: "Font upload failed" });
+    res.status(500).json({ message: err.message || "Error uploading font" });
   }
 };
+
 
 
 /**
@@ -101,23 +123,17 @@ export const uploadFont = async (req, res) => {
  */
 export const getAllFonts = async (req, res) => {
   try {
+    // Fetch all fonts for the logged-in user
     const fonts = await Font.find({ user: req.user.id }).sort({ createdAt: -1 });
 
+    // Map through fonts and attach permanent URLs
     const fontsWithUrls = fonts.map((font) => {
       const originalDownloadUrl = font.originalFile
-        ? s3.getSignedUrl("getObject", {
-            Bucket: process.env.S3_BUCKET_NAME,
-            Key: font.originalFile,
-            Expires: 60 * 60, // 1 hour each request
-          })
+        ? `https://${process.env.S3_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${font.originalFile}`
         : null;
 
       const woff2DownloadUrl = font.woff2File
-        ? s3.getSignedUrl("getObject", {
-            Bucket: process.env.S3_BUCKET_NAME,
-            Key: font.woff2File,
-            Expires: 60 * 60,
-          })
+        ? `https://${process.env.S3_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${font.woff2File}`
         : null;
 
       return {

@@ -23,50 +23,57 @@ export const uploadFont = async (req, res) => {
       return res.status(400).json({ message: "No font file uploaded" });
     }
 
-    const fileExt = req.file.originalname.split(".").pop().toLowerCase();
-
-    // 1️⃣ Convert to WOFF2
-    const woff2Buffer = ensureWoff2(req.file.buffer, fileExt);
-    if (!woff2Buffer) {
-      return res.status(400).json({ message: "WOFF2 conversion failed" });
+    // 1️⃣ Detect file type (old API on Render)
+    const type = await fileType.fromBuffer(req.file.buffer);
+    if (!type || !["ttf", "otf", "woff", "woff2", "eot"].includes(type.ext)) {
+      return res.status(400).json({ message: "Invalid font format" });
     }
 
-    // 2️⃣ Upload original font
-    const originalKey = `fonts/${Date.now()}-${req.file.originalname}`;
-    await s3
-      .upload({
-        Bucket: process.env.S3_BUCKET_NAME,
-        Key: originalKey,
-        Body: req.file.buffer,
-        ContentType: req.file.mimetype,
-      })
-      .promise();
+    // 2️⃣ Parse font metadata from memory
+    let font;
+    try {
+      font = fontkit.create(req.file.buffer);
+    } catch (err) {
+      console.error("❌ Font parsing error:", err);
+      return res.status(400).json({ message: "Unable to parse font file" });
+    }
 
-    // 3️⃣ Upload WOFF2 version
-    const woff2Key = originalKey.replace(/\.(otf|ttf)$/i, ".woff2");
+    const fontMetadata = {
+      family: font.familyName || "",
+      fullName: font.fullName || "",
+      postscriptName: font.postscriptName || "",
+      style: font.subfamilyName || "",
+      weight: font["OS/2"]?.usWeightClass || null,
+      manufacturer: font.manufacturer || "",
+    };
+
+    // 3️⃣ Upload to S3
+    const s3Key = `${Date.now()}-${req.file.originalname}`;
     await s3
-      .upload({
+      .putObject({
         Bucket: process.env.S3_BUCKET_NAME,
-        Key: woff2Key,
-        Body: woff2Buffer,
-        ContentType: "font/woff2",
+        Key: s3Key,
+        Body: req.file.buffer,
+        ContentType: type.mime,
       })
       .promise();
 
     // 4️⃣ Save metadata to MongoDB
-    const font = await Font.create({
+    const newFont = new Font({
       name: req.file.originalname,
-      originalFile: originalKey,
-      woff2File: woff2Key,
+      originalFile: s3Key,
       user: req.user.id,
+      ...fontMetadata,
     });
 
+    await newFont.save();
+
     res.status(201).json({
-      message: "✅ Font uploaded & converted",
-      font,
+      message: "Font uploaded successfully",
+      font: newFont,
     });
-  } catch (error) {
-    console.error("❌ Font upload error:", error);
+  } catch (err) {
+    console.error("❌ Error uploading font:", err);
     res.status(500).json({ message: "Error uploading font" });
   }
 };

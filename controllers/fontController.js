@@ -32,54 +32,42 @@ export const uploadFont = async (req, res) => {
     const baseName = path.basename(originalFileName, path.extname(originalFileName));
 
     console.log(`📦 Uploading font: ${originalFileName} (${ext})`);
-    console.log(`📦 Buffer length: ${req.file.buffer.length}`);
 
-    // 1️⃣ Upload original file to S3
+    // Extract metadata before uploading
+    const metadata = extractFontMetadata(req.file.buffer);
+
+    // Upload original
     const originalKey = `fonts/${Date.now()}-${originalFileName}`;
-    await s3
-      .upload({
-        Bucket: process.env.S3_BUCKET_NAME,
-        Key: originalKey,
-        Body: req.file.buffer, // always a Buffer
-      })
-      .promise();
-
-    const originalUrl = s3.getSignedUrl("getObject", {
+    await s3.upload({
       Bucket: process.env.S3_BUCKET_NAME,
       Key: originalKey,
-      Expires: 60 * 60, // 1 hour
-    });
+      Body: req.file.buffer,
+    }).promise();
 
-    // 2️⃣ Try to create WOFF2 version
-    let woff2Url = null;
+    // Convert TTF to WOFF2 if possible
+    let woff2Key = null;
     const woff2Buffer = await ensureWoff2(req.file.buffer, ext);
-
     if (woff2Buffer) {
-      const woff2Key = `fonts/${Date.now()}-${baseName}.woff2`;
-      await s3
-        .upload({
-          Bucket: process.env.S3_BUCKET_NAME,
-          Key: woff2Key,
-          Body: woff2Buffer,
-        })
-        .promise();
-
-      woff2Url = s3.getSignedUrl("getObject", {
+      woff2Key = `fonts/${Date.now()}-${baseName}.woff2`;
+      await s3.upload({
         Bucket: process.env.S3_BUCKET_NAME,
         Key: woff2Key,
-        Expires: 60 * 60,
-      });
-    } else {
-      console.warn(`⚠️ WOFF2 conversion skipped for: ${originalFileName}`);
+        Body: woff2Buffer,
+      }).promise();
     }
 
-    // 3️⃣ Save to MongoDB
+    // Save in MongoDB (store keys, not signed URLs)
     const fontDoc = await Font.create({
       name: baseName,
       originalFile: originalKey,
-      woff2File: woff2Buffer ? `${baseName}.woff2` : null,
-      originalDownloadUrl: originalUrl,
-      woff2DownloadUrl: woff2Url,
+      woff2File: woff2Key,
+      family: metadata.family,
+      fullName: metadata.fullName,
+      postscriptName: metadata.postscriptName,
+      style: metadata.style,
+      weight: metadata.weight,
+      manufacturer: metadata.manufacturer,
+      license: metadata.license,
       user: req.user.id,
     });
 
@@ -90,38 +78,39 @@ export const uploadFont = async (req, res) => {
   }
 };
 
+
 /**
  * 📄 Get all fonts for logged-in user (with S3 preview URLs)
  */
 export const getAllFonts = async (req, res) => {
   try {
-    const isAdmin = req.user.role === "admin";
-    const fonts = await Font.find(
-      isAdmin ? {} : { user: req.user.id }
-    ).sort({ createdAt: -1 });
+    const fonts = await Font.find({ user: req.user.id }).sort({ createdAt: -1 });
 
-    // Attach signed preview URL
-    const fontsWithPreviews = await Promise.all(
-      fonts.map(async (font) => {
-        let signedUrl = null;
-        try {
-          signedUrl = s3.getSignedUrl("getObject", {
+    const fontsWithUrls = fonts.map((font) => {
+      const originalDownloadUrl = font.originalFile
+        ? s3.getSignedUrl("getObject", {
             Bucket: process.env.S3_BUCKET_NAME,
             Key: font.originalFile,
-            Expires: 3600, // 1 hour
-          });
-        } catch (err) {
-          console.error("⚠️ Failed to generate preview URL:", err);
-        }
+            Expires: 60 * 60, // 1 hour each request
+          })
+        : null;
 
-        return {
-          ...font.toObject(),
-          previewUrl: signedUrl,
-        };
-      })
-    );
+      const woff2DownloadUrl = font.woff2File
+        ? s3.getSignedUrl("getObject", {
+            Bucket: process.env.S3_BUCKET_NAME,
+            Key: font.woff2File,
+            Expires: 60 * 60,
+          })
+        : null;
 
-    res.json(fontsWithPreviews);
+      return {
+        ...font.toObject(),
+        originalDownloadUrl,
+        woff2DownloadUrl,
+      };
+    });
+
+    res.status(200).json(fontsWithUrls);
   } catch (err) {
     console.error("❌ Error fetching fonts:", err);
     res.status(500).json({ message: "Error fetching fonts" });

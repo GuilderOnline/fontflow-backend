@@ -74,30 +74,33 @@ export const uploadFont = async (req, res) => {
       }).promise();
     }
 
-    // Permanent Public URLs
-    const originalUrl = `https://${process.env.S3_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${originalKey}`;
-    const woff2Url = woff2Key
-      ? `https://${process.env.S3_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${woff2Key}`
-      : null;
-
     // Extract Metadata
     const metadata = extractFontMetadata(buffer);
 
-    // Save to Mongo
+    // Save keys (not full URLs) in Mongo
     const fontDoc = await Font.create({
       name: req.file.originalname,
-      originalFile: originalUrl,
-      woff2File: woff2Url,
+      originalFile: originalKey, // ✅ store key
+      woff2File: woff2Key,       // ✅ store key
       user: req.user.id,
       ...metadata
     });
 
-    res.status(201).json(fontDoc);
+    // Send back doc + immediate preview URLs
+    res.status(201).json({
+      ...fontDoc.toObject(),
+      originalUrl: `https://${process.env.S3_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${originalKey}`,
+      woff2Url: woff2Key
+        ? `https://${process.env.S3_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${woff2Key}`
+        : null
+    });
+
   } catch (err) {
     console.error("❌ Font upload error:", err);
     res.status(500).json({ message: "Error uploading font" });
   }
 };
+
 
 
 

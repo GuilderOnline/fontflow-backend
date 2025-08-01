@@ -8,6 +8,7 @@ const fontSchema = new mongoose.Schema({
     ref: 'User',
     required: true,
   },
+  woff2File: { type: String },
   family: String,
   fullName: String,
   postscriptName: String,

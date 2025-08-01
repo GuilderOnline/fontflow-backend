@@ -7,7 +7,7 @@ import { jwtAuth } from '../middleware/jwtAuth.js';
 
 const router = express.Router();
 
-// ✅ GET /api/projects (secured)
+// ✅ GET /api/projects (secured) – Get all projects for the authenticated user
 router.get('/', jwtAuth, async (req, res) => {
   try {
     const projects = await Project.find({ userId: req.user.id }).populate('fonts');
@@ -18,7 +18,7 @@ router.get('/', jwtAuth, async (req, res) => {
   }
 });
 
-// ✅ GET /api/projects/:slug
+// ✅ GET /api/projects/:slug – Get a single project by slug
 router.get('/:slug', jwtAuth, async (req, res) => {
   try {
     const project = await Project.findOne({ slug: req.params.slug, userId: req.user.id }).populate('fonts');
@@ -29,7 +29,7 @@ router.get('/:slug', jwtAuth, async (req, res) => {
   }
 });
 
-// ✅ GET /api/projects/:id/apikeys
+// ✅ GET /api/projects/:id/apikeys – Get API keys associated with a project
 router.get('/:id/apikeys', jwtAuth, async (req, res) => {
   try {
     const keys = await ApiKey.find({ projectId: req.params.id, userId: req.user.id });
@@ -39,12 +39,9 @@ router.get('/:id/apikeys', jwtAuth, async (req, res) => {
   }
 });
 
-// ✅ POST /api/projects – Create new project
+// ✅ POST /api/projects – Create a new project
 router.post('/', jwtAuth, async (req, res) => {
   try {
-    console.log('📥 Incoming body:', req.body);
-    console.log('🧠 req.user:', req.user); // ✅ Add this line to inspect the authenticated user
-
     const { name } = req.body;
     if (!name) return res.status(400).json({ error: 'Project name is required' });
 
@@ -65,11 +62,51 @@ router.post('/', jwtAuth, async (req, res) => {
   }
 });
 
-// ✅ POST /api/projects/:id/fonts – Add font to project
+// ✅ PUT /api/projects/:id – Update an existing project
+router.put('/:id', jwtAuth, async (req, res) => {
+  try {
+    const { name, url, description } = req.body;
+    const project = await Project.findById(req.params.id);
+
+    if (!project || project.userId.toString() !== req.user.id) {
+      return res.status(404).json({ error: 'Project not found or unauthorized' });
+    }
+
+    project.name = name || project.name;
+    project.url = url || project.url;
+    project.description = description || project.description;
+
+    const updatedProject = await project.save();
+    res.json(updatedProject);
+  } catch (err) {
+    console.error('❌ Error updating project:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ✅ DELETE /api/projects/:id – Delete a project
+router.delete('/:id', jwtAuth, async (req, res) => {
+  try {
+    const project = await Project.findById(req.params.id);
+
+    if (!project || project.userId.toString() !== req.user.id) {
+      return res.status(404).json({ error: 'Project not found or unauthorized' });
+    }
+
+    await project.remove();
+    res.json({ message: 'Project deleted successfully' });
+  } catch (err) {
+    console.error('❌ Error deleting project:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ✅ POST /api/projects/:id/fonts – Add a font to a project
 router.post('/:id/fonts', jwtAuth, async (req, res) => {
   try {
     const { fontId } = req.body;
     const project = await Project.findOne({ _id: req.params.id, userId: req.user.id });
+
     if (!project) return res.status(404).json({ error: 'Project not found' });
 
     if (!project.fonts.includes(fontId)) {
@@ -84,11 +121,12 @@ router.post('/:id/fonts', jwtAuth, async (req, res) => {
   }
 });
 
-// ✅ DELETE /api/projects/:id/fonts/:fontId – Remove font from project
+// ✅ DELETE /api/projects/:id/fonts/:fontId – Remove a font from a project
 router.delete('/:id/fonts/:fontId', jwtAuth, async (req, res) => {
   try {
     const { id, fontId } = req.params;
     const project = await Project.findOne({ _id: id, userId: req.user.id });
+
     if (!project) return res.status(404).json({ error: 'Project not found' });
 
     project.fonts = project.fonts.filter(f => f.toString() !== fontId);
@@ -100,5 +138,55 @@ router.delete('/:id/fonts/:fontId', jwtAuth, async (req, res) => {
     res.status(500).json({ error: 'Server error' });
   }
 });
+
+// ✅ GET /api/projects/:id/generate-code – Generate Embed & CSS Code for a Project
+router.get('/:id/generate-code', jwtAuth, async (req, res) => {
+  try {
+    const project = await Project.findById(req.params.id).populate('fonts');
+    if (!project) return res.status(404).json({ error: 'Project not found' });
+
+    const fonts = project.fonts;
+
+    // Generate embed and CSS code
+    const { embedCode, cssCode } = generateCode(fonts);
+
+    res.json({ embedCode, cssCode });
+  } catch (err) {
+    console.error('❌ Error generating code:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Function to generate embed and CSS code based on fonts
+function generateCode(fonts) {
+  const preconnectLink = `<link rel="preconnect" href="https://s3.amazonaws.com">`;
+
+  const fontUrls = fonts
+    .map(font => {
+      return `${font.family.replace(/ /g, "+")}:wght@${font.weights.join('..')}`;
+    })
+    .join("&family=");
+
+  const linkTag = `${preconnectLink}
+<link href="https://fonts.gstatic.com/css2?family=${fontUrls}&display=swap" rel="stylesheet">`;
+
+  const cssText = fonts
+    .map(font => {
+      return font.weights
+        .map(weight => {
+          const uniquifier = `${font.family.replace(/ /g, "-").toLowerCase()}-${weight}`;
+          return `
+.${font.family.replace(/ /g, "-").toLowerCase()}-${uniquifier} {
+  font-family: "${font.family}", sans-serif;
+  font-weight: ${weight};
+  src: url("https://s3.amazonaws.com/${process.env.S3_BUCKET_NAME}/${font.file}") format("woff2");
+}`;
+        })
+        .join("\n");
+    })
+    .join("\n");
+
+  return { embedCode: linkTag, cssCode: cssText };
+}
 
 export default router;

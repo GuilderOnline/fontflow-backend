@@ -22,6 +22,10 @@ export const uploadFont = async (req, res) => {
     if (!req.file || !req.file.buffer) {
       return res.status(400).json({ message: "No font file uploaded" });
     }
+    console.log("📦 Multer file object:", req.file);
+    console.log("📦 req.file.buffer type:", typeof req.file.buffer);
+    console.log("📦 Is Buffer:", Buffer.isBuffer(req.file.buffer));
+    console.log("📦 Buffer length:", req.file.buffer?.length);
 
     const fileExt = req.file.originalname.split(".").pop().toLowerCase();
 

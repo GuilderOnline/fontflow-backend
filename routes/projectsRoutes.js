@@ -168,34 +168,37 @@ function generateCode(fonts) {
     .map(font => {
       const fontFamilyName = font.fullName || font.family || "CustomFont";
 
-      if (!font.file) {
+      // Use file if available, otherwise originalFile
+      const fileName = font.file || font.originalFile;
+      if (!fileName) {
         console.warn(`⚠️ Skipping font "${fontFamilyName}" because no file is defined.`);
         return "";
       }
 
-      // Base file name without extension (so we can reference multiple formats)
-      const baseFile = font.file.replace(/\.[^/.]+$/, ""); 
+      // Ensure correct S3 path
+      const filePath = fileName.startsWith("fonts/") ? fileName : `fonts/${fileName}`;
+      const fontFileUrl = `https://fontflowbucket.s3.eu-north-1.amazonaws.com/${filePath}`;
 
-      // URLs for different formats
-      const woff2Url = `https://fontflowbucket.s3.eu-north-1.amazonaws.com/fonts/${baseFile}.woff2`;
-      const woffUrl  = `https://fontflowbucket.s3.eu-north-1.amazonaws.com/fonts/${baseFile}.woff`;
-      const ttfUrl   = `https://fontflowbucket.s3.eu-north-1.amazonaws.com/fonts/${baseFile}.ttf`;
+      // Determine format
+      const lowerFile = fileName.toLowerCase();
+      const formatType = lowerFile.endsWith('.woff2')
+        ? 'woff2'
+        : lowerFile.endsWith('.woff')
+          ? 'woff'
+          : 'truetype';
 
-      // Default to 400 if no weights provided
+      // Default weight to 400 if none provided
       const weights = Array.isArray(font.weights) && font.weights.length > 0
         ? font.weights
         : [400];
 
-      // Generate @font-face for each weight
       return weights
         .map(weight => `
 @font-face {
   font-family: "${fontFamilyName}";
   font-style: normal;
   font-weight: ${weight};
-  src: url("${woff2Url}") format("woff2"),
-       url("${woffUrl}") format("woff"),
-       url("${ttfUrl}") format("truetype");
+  src: url("${fontFileUrl}") format("${formatType}");
 }`)
         .join("\n");
     })
@@ -203,14 +206,5 @@ function generateCode(fonts) {
 
   return { cssCode: cssText };
 }
-
-
-
-
-
-
-
-
-
 
 export default router;

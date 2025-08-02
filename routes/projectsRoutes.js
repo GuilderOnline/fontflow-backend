@@ -162,6 +162,7 @@ router.get('/:id/generate-code', jwtAuth, async (req, res) => {
 // Function to generate embed and CSS code based on fonts
 // Function to generate embed and CSS code based on fonts
 // Function to generate embed and CSS code based on fonts
+// Function to generate @font-face CSS for fonts
 function generateCode(fonts) {
   const cssText = fonts
     .map(font => {
@@ -172,25 +173,29 @@ function generateCode(fonts) {
         return "";
       }
 
-      const fontFileUrl = `https://fontflowbucket.s3.eu-north-1.amazonaws.com/fonts/${font.file}`;
-      const formatType = font.file.toLowerCase().endsWith('.woff2')
-        ? 'woff2'
-        : font.file.toLowerCase().endsWith('.woff')
-          ? 'woff'
-          : 'truetype';
+      // Base file name without extension (so we can reference multiple formats)
+      const baseFile = font.file.replace(/\.[^/.]+$/, ""); 
+
+      // URLs for different formats
+      const woff2Url = `https://fontflowbucket.s3.eu-north-1.amazonaws.com/fonts/${baseFile}.woff2`;
+      const woffUrl  = `https://fontflowbucket.s3.eu-north-1.amazonaws.com/fonts/${baseFile}.woff`;
+      const ttfUrl   = `https://fontflowbucket.s3.eu-north-1.amazonaws.com/fonts/${baseFile}.ttf`;
 
       // Default to 400 if no weights provided
       const weights = Array.isArray(font.weights) && font.weights.length > 0
         ? font.weights
         : [400];
 
+      // Generate @font-face for each weight
       return weights
         .map(weight => `
 @font-face {
   font-family: "${fontFamilyName}";
   font-style: normal;
   font-weight: ${weight};
-  src: url("${fontFileUrl}") format("${formatType}");
+  src: url("${woff2Url}") format("woff2"),
+       url("${woffUrl}") format("woff"),
+       url("${ttfUrl}") format("truetype");
 }`)
         .join("\n");
     })
@@ -198,6 +203,7 @@ function generateCode(fonts) {
 
   return { cssCode: cssText };
 }
+
 
 
 

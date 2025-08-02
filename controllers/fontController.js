@@ -164,9 +164,13 @@ export const getAllFonts = async (req, res) => {
 /**
  * 🗑 Delete a font
  */
+/**
+ * 🗑 Delete a font (no user ownership check)
+ */
 export const deleteFont = async (req, res) => {
   try {
-    const font = await Font.findOne({ _id: req.params.id, user: req.user.id });
+    // Find font by ID only
+    const font = await Font.findById(req.params.id);
     if (!font) {
       return res.status(404).json({ message: "Font not found" });
     }
@@ -188,3 +192,4 @@ export const deleteFont = async (req, res) => {
     res.status(500).json({ message: "Error deleting font" });
   }
 };
+

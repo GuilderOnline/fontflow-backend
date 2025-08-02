@@ -6,12 +6,13 @@ import { jwtAuth } from '../middleware/jwtAuth.js';
 import { authenticate, authorizeRoles } from '../middleware/authMiddleware.js';
 import Font from '../models/fontModel.js';
 
+const router = express.Router();
+
 router.delete('/:id', (req, res, next) => {
   console.log("🛠 Delete route hit:", req.params.id);
   next();
-});
+}, jwtAuth, deleteFont);
 
-const router = express.Router();
 
 // Multer memory storage for in-memory buffer upload
 const upload = multer({ storage: multer.memoryStorage() });

@@ -166,10 +166,20 @@ function generateCode(fonts) {
   const cssText = fonts
     .map(font => {
       const fontFamilyName = font.fullName || font.family || "CustomFont";
-      const fontFileUrl = `https://fontflowbucket.s3.eu-north-1.amazonaws.com/fonts/${font.file}`;
-      const formatType = font.file.toLowerCase().endsWith('.woff2') ? 'woff2' : 'truetype';
 
-      // Default to [400] if no weights provided
+      if (!font.file) {
+        console.warn(`⚠️ Skipping font "${fontFamilyName}" because no file is defined.`);
+        return "";
+      }
+
+      const fontFileUrl = `https://fontflowbucket.s3.eu-north-1.amazonaws.com/fonts/${font.file}`;
+      const formatType = font.file.toLowerCase().endsWith('.woff2')
+        ? 'woff2'
+        : font.file.toLowerCase().endsWith('.woff')
+          ? 'woff'
+          : 'truetype';
+
+      // Default to 400 if no weights provided
       const weights = Array.isArray(font.weights) && font.weights.length > 0
         ? font.weights
         : [400];
@@ -188,6 +198,7 @@ function generateCode(fonts) {
 
   return { cssCode: cssText };
 }
+
 
 
 

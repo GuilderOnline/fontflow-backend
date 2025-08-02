@@ -169,26 +169,23 @@ function generateCode(fonts) {
     .map(font => {
       const fontFamilyName = font.fullName || font.family || "CustomFont";
 
-      // ✅ Prefer woff2File, fallback to originalFile
-      const fileKey = font.woff2File || font.originalFile;
+      // Prefer woff2, fallback to original
+      const fileKey = font.woff2File || font.originalFile || font.file;
       if (!fileKey) {
         console.warn(`⚠️ Skipping font "${fontFamilyName}" because no file is defined.`);
         return "";
       }
 
-      // ✅ Correct S3 URL (already has fonts/ in it)
       const fontFileUrl = `https://fontflowbucket.s3.eu-north-1.amazonaws.com/${fileKey}`;
-
       const formatType = fileKey.toLowerCase().endsWith('.woff2')
         ? 'woff2'
         : fileKey.toLowerCase().endsWith('.woff')
           ? 'woff'
           : 'truetype';
 
-      // ✅ Default to 400 if no weights provided
       const weights = Array.isArray(font.weights) && font.weights.length > 0
         ? font.weights
-        : [font.weight || 400];
+        : [font.weight || 400]; // fallback from DB weight or 400
 
       return weights
         .map(weight => `

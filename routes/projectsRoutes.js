@@ -169,24 +169,26 @@ function generateCode(fonts) {
     .map(font => {
       const fontFamilyName = font.fullName || font.family || "CustomFont";
 
-      if (!font.file) {
+      // ✅ Prefer woff2File, fallback to originalFile
+      const fileKey = font.woff2File || font.originalFile;
+      if (!fileKey) {
         console.warn(`⚠️ Skipping font "${fontFamilyName}" because no file is defined.`);
         return "";
       }
 
-      // ✅ Correct URL to include /fonts/
-      const fontFileUrl = `https://fontflowbucket.s3.eu-north-1.amazonaws.com/fonts/${font.file}`;
+      // ✅ Correct S3 URL (already has fonts/ in it)
+      const fontFileUrl = `https://fontflowbucket.s3.eu-north-1.amazonaws.com/${fileKey}`;
 
-      const formatType = font.file.toLowerCase().endsWith('.woff2')
+      const formatType = fileKey.toLowerCase().endsWith('.woff2')
         ? 'woff2'
-        : font.file.toLowerCase().endsWith('.woff')
+        : fileKey.toLowerCase().endsWith('.woff')
           ? 'woff'
           : 'truetype';
 
-      // Default to 400 if no weights provided
+      // ✅ Default to 400 if no weights provided
       const weights = Array.isArray(font.weights) && font.weights.length > 0
         ? font.weights
-        : [400];
+        : [font.weight || 400];
 
       return weights
         .map(weight => `
@@ -202,6 +204,7 @@ function generateCode(fonts) {
 
   return { cssCode: cssText };
 }
+
 
 
 export default router;

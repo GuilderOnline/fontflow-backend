@@ -163,31 +163,27 @@ router.get('/:id/generate-code', jwtAuth, async (req, res) => {
 // Function to generate embed and CSS code based on fonts
 // Function to generate embed and CSS code based on fonts
 // Function to generate @font-face CSS for fonts
+// Function to generate embed and CSS code based on fonts
 function generateCode(fonts) {
   const cssText = fonts
     .map(font => {
       const fontFamilyName = font.fullName || font.family || "CustomFont";
 
-      // Use file if available, otherwise originalFile
-      const fileName = font.file || font.originalFile;
-      if (!fileName) {
+      if (!font.file) {
         console.warn(`⚠️ Skipping font "${fontFamilyName}" because no file is defined.`);
         return "";
       }
 
-      // Ensure correct S3 path
-      const filePath = fileName.startsWith("fonts/") ? fileName : `fonts/${fileName}`;
-      const fontFileUrl = `https://fontflowbucket.s3.eu-north-1.amazonaws.com/${filePath}`;
+      // ✅ Correct URL to include /fonts/
+      const fontFileUrl = `https://fontflowbucket.s3.eu-north-1.amazonaws.com/fonts/${font.file}`;
 
-      // Determine format
-      const lowerFile = fileName.toLowerCase();
-      const formatType = lowerFile.endsWith('.woff2')
+      const formatType = font.file.toLowerCase().endsWith('.woff2')
         ? 'woff2'
-        : lowerFile.endsWith('.woff')
+        : font.file.toLowerCase().endsWith('.woff')
           ? 'woff'
           : 'truetype';
 
-      // Default weight to 400 if none provided
+      // Default to 400 if no weights provided
       const weights = Array.isArray(font.weights) && font.weights.length > 0
         ? font.weights
         : [400];
@@ -206,5 +202,6 @@ function generateCode(fonts) {
 
   return { cssCode: cssText };
 }
+
 
 export default router;

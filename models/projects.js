@@ -1,7 +1,9 @@
 import mongoose from 'mongoose';
 
 const projectSchema = new mongoose.Schema({
-  name: { type: String, required: true },                         // e.g., "My Website"
+  name: { type: String, required: true },
+  url: { type: String },         // ✅ Added URL field
+  description: { type: String }, // ✅ Added Description field                         // e.g., "My Website"
   slug: { type: String, unique: true },                           // e.g., "my-website"
   userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   fonts: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Font' }], // Fonts linked to this project

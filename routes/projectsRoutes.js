@@ -49,6 +49,8 @@ router.post('/', jwtAuth, async (req, res) => {
 
     const project = new Project({
       name,
+      url,
+      description,
       slug,
       userId: req.user.id,
       fonts: [],

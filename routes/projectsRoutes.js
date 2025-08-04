@@ -106,7 +106,7 @@ router.delete('/:id', jwtAuth, async (req, res) => {
       return res.status(401).json({ error: 'User authentication failed' });
     }
 
-    if (project.user.toString() !== req.user.id) {
+    if (project.userId?.toString() !== req.user.id) {
       console.log('🛠 Ownership mismatch: project.user =', project.user.toString(), 'req.user.id =', req.user.id);
       return res.status(403).json({ error: 'Not authorized to delete this project' });
     }

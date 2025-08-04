@@ -91,17 +91,23 @@ router.delete('/:id', jwtAuth, async (req, res) => {
   try {
     const project = await Project.findById(req.params.id);
 
-    if (!project || project.userId.toString() !== req.user.id) {
-      return res.status(404).json({ error: 'Project not found or unauthorized' });
+    if (!project) {
+      return res.status(404).json({ error: 'Project not found' });
     }
 
-    await project.remove();
+    // ✅ Correct ownership check
+    if (project.user.toString() !== req.user.id) {
+      return res.status(403).json({ error: 'Not authorized to delete this project' });
+    }
+
+    await project.deleteOne(); // `remove()` is deprecated
     res.json({ message: 'Project deleted successfully' });
   } catch (err) {
     console.error('❌ Error deleting project:', err);
     res.status(500).json({ error: 'Server error' });
   }
 });
+
 
 // ✅ POST /api/projects/:id/fonts – Add a font to a project
 router.post('/:id/fonts', jwtAuth, async (req, res) => {

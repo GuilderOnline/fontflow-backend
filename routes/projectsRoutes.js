@@ -86,33 +86,41 @@ router.put('/:id', jwtAuth, async (req, res) => {
   }
 });
 
-// ✅ DELETE /api/projects/:id – Delete a project
+// ✅ DELETE /api/projects/:id – Delete a project (with debug logs)
 router.delete('/:id', jwtAuth, async (req, res) => {
   try {
-    const project = await Project.findById(req.params.id);
+    console.log('🛠 DELETE request for project ID:', req.params.id);
+    console.log('🛠 Authenticated user:', req.user);
 
-    // ✅ Check if project exists
+    const project = await Project.findById(req.params.id);
+    console.log('🛠 Found project:', project);
+
     if (!project) {
+      console.log('🛠 Project not found');
       return res.status(404).json({ error: 'Project not found' });
     }
 
-    // ✅ Check if req.user.id exists
+    // ✅ Ownership check
     if (!req.user?.id) {
+      console.log('🛠 No req.user.id found — JWT issue');
       return res.status(401).json({ error: 'User authentication failed' });
     }
 
-    // ✅ Correct ownership check
     if (project.user.toString() !== req.user.id) {
+      console.log('🛠 Ownership mismatch: project.user =', project.user.toString(), 'req.user.id =', req.user.id);
       return res.status(403).json({ error: 'Not authorized to delete this project' });
     }
 
-    await project.deleteOne(); // modern alternative to remove()
+    await project.deleteOne();
+    console.log('🛠 Project deleted successfully');
+
     res.json({ message: 'Project deleted successfully' });
   } catch (err) {
     console.error('❌ Error deleting project:', err);
     res.status(500).json({ error: 'Server error' });
   }
 });
+
 
 
 

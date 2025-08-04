@@ -42,7 +42,7 @@ router.get('/:id/apikeys', jwtAuth, async (req, res) => {
 // ✅ POST /api/projects – Create a new project
 router.post('/', jwtAuth, async (req, res) => {
   try {
-    const { name } = req.body;
+    const { name, url, description } = req.body;
     if (!name) return res.status(400).json({ error: 'Project name is required' });
 
     const slug = slugify(name, { lower: true, strict: true });

@@ -27,10 +27,10 @@ const seedUsers = async () => {
     ];
 
     await User.insertMany(users);
-    console.log('✅ Seeded users successfully');
+    console.log('Seeded users successfully');
     process.exit();
   } catch (err) {
-    console.error('❌ Seeder failed:', err);
+    console.error('Seeder failed:', err);
     process.exit(1);
   }
 };

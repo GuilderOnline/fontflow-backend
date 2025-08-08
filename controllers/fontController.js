@@ -1,13 +1,9 @@
-// controllers/fontController.js
 import AWS from "aws-sdk";
-import * as fontkit from "fontkit"; // ✅ FIXED for ESM
-import fileType from "file-type";   // ✅ Import entire package (works on Render's Node + file-type v16)
+import * as fontkit from "fontkit"; // FIXED for ESM
+import fileType from "file-type";   // Import entire package (works on Render's Node + file-type v16)
 import Font from "../models/fontModel.js";
 import { ensureWoff2 } from '../utils/fontConversion.js';
 import path from "path";
-
-
-
 
 // Configure AWS S3
 const s3 = new AWS.S3({
@@ -29,17 +25,12 @@ function extractFontMetadata(buffer) {
       license: font.license || "",
     };
   } catch (err) {
-    console.warn("⚠️ Could not extract font metadata:", err);
+    console.warn("Could not extract font metadata:", err);
     return {};
   }
 }
 
-
-/**
- * 📤 Upload a font
- */
-
-
+// Upload a font
 export const uploadFont = async (req, res) => {
   try {
     if (!req.file || !req.file.buffer) {
@@ -80,8 +71,8 @@ export const uploadFont = async (req, res) => {
     // Save keys (not full URLs) in Mongo
     const fontDoc = await Font.create({
       name: req.file.originalname,
-      originalFile: originalKey, // ✅ store key
-      woff2File: woff2Key,       // ✅ store key
+      originalFile: originalKey, // store key
+      woff2File: woff2Key,       // store key
       user: req.user.id,
       ...metadata
     });
@@ -96,18 +87,11 @@ export const uploadFont = async (req, res) => {
     });
 
   } catch (err) {
-    console.error("❌ Font upload error:", err);
+    console.error("Font upload error:", err);
     res.status(500).json({ message: "Error uploading font" });
   }
 };
-
-
-
-
-
-/**
- * 📄 Get all fonts for logged-in user (with S3 preview URLs)
- */
+// Get all fonts for logged-in user (with S3 preview URLs)
 export const getAllFonts = async (req, res) => {
   try {
     const query = req.user.role === "admin" ? {} : { user: req.user.id };
@@ -155,17 +139,12 @@ export const getAllFonts = async (req, res) => {
 
     res.json(fontsWithUrls);
   } catch (err) {
-    console.error("❌ Error fetching fonts:", err);
+    console.error("Error fetching fonts:", err);
     res.status(500).json({ message: "Failed to fetch fonts" });
   }
 };
-
-
-/**
- * 🗑 Delete a font
- */
-/**
- * 🗑 Delete a font (no user ownership check)
+/*
+ * Delete a font (no user ownership check)
  */
 export const deleteFont = async (req, res) => {
   try {
@@ -188,7 +167,7 @@ export const deleteFont = async (req, res) => {
 
     res.json({ message: "Font deleted successfully" });
   } catch (err) {
-    console.error("❌ Error deleting font:", err);
+    console.error("Error deleting font:", err);
     res.status(500).json({ message: "Error deleting font" });
   }
 };

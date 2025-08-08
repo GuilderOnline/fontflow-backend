@@ -1,15 +1,18 @@
-// config/db.js
 import mongoose from 'mongoose';
 
+// Async function to connect to MongoDB using Mongoose
 const connectDB = async () => {
   try {
+    // Attempt to connect using environment variable for URI
     const conn = await mongoose.connect(process.env.MONGO_URI, {
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
+      useNewUrlParser: true,      // Use new URL parser
+      useUnifiedTopology: true,   // Use new server discovery and monitoring engine
     });
-    console.log(`✅ MongoDB Connected: ${conn.connection.host}`);
+    // Log successful connection
+    console.log(`MongoDB Connected: ${conn.connection.host}`);
   } catch (err) {
-    console.error(`❌ MongoDB Connection Error: ${err.message}`);
+    // Log error and exit process if connection fails
+    console.error(`MongoDB Connection Error: ${err.message}`);
     process.exit(1);
   }
 };

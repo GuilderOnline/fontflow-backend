@@ -1,4 +1,3 @@
-// routes/publicFontRoutes.js
 import express from 'express';
 import Project from '../models/projects.js';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
@@ -6,6 +5,7 @@ import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
 
 const router = express.Router();
 
+// Configure S3 client with credentials and region from environment
 const s3 = new S3Client({
   region: process.env.AWS_REGION,
   credentials: {
@@ -20,11 +20,13 @@ const s3 = new S3Client({
  */
 router.get('/projects/:slug/fonts.css', async (req, res) => {
   try {
+    // Find project by slug and populate fonts
     const project = await Project.findOne({ slug: req.params.slug }).populate('fonts');
     if (!project) return res.status(404).send('/* Project not found */');
 
-    // Generate signed URLs for each font
+    // Generate signed URLs for each font and build @font-face CSS rules
     const cssRules = await Promise.all(project.fonts.map(async (font) => {
+      // Generate signed URL for font file (expires in 1 hour)
       const signedUrl = await getSignedUrl(
         s3,
         new GetObjectCommand({
@@ -34,6 +36,7 @@ router.get('/projects/:slug/fonts.css', async (req, res) => {
         { expiresIn: 3600 } // 1 hour expiry
       );
 
+      // Build @font-face CSS rule for this font
       return `
 @font-face {
   font-family: '${font.fullName || font.name || 'CustomFont'}';
@@ -44,10 +47,12 @@ router.get('/projects/:slug/fonts.css', async (req, res) => {
 `;
     }));
 
+    // Set response header and send CSS
     res.setHeader('Content-Type', 'text/css');
     res.send(cssRules.join('\n'));
   } catch (err) {
-    console.error('❌ Error generating font-face CSS:', err);
+    // Log error and send server error comment in CSS
+    console.error('Error generating font-face CSS:', err);
     res.status(500).send('/* Server error */');
   }
 });

@@ -22,6 +22,12 @@ const seedUsers = async () => {
       {
         username: 'user1@fontflow.com',
         password: await bcrypt.hash('user123', 10),
+        role: 'admin',
+      },
+      
+      {
+        username: 'user1@fontflow.com',
+        password: await bcrypt.hash('user123', 10),
         role: 'user',
       },
     ];
